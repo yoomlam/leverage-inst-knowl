@@ -444,6 +444,16 @@ A skill may write a **computed, human-readable artifact** — an AI-generated su
 
 This is distinct from a human-verified summary: the artifact is unverified computed output until a human reviews it, at which point it becomes human-verified DS content under the human's own identity.
 
+#### Use case: Secured project information
+
+(Courtesy of Ryn Bennett)
+
+Portfolio managers may restrict access to PMR meeting notes so project status is inaccessible to others. That meeting is the only place where comprehensive risk management metrics for each program are discussed. The metrics related to those projects are housed behind multiple access walls.
+
+Furthermore, Massachusetts PFML recently revamped their data access schema, which now requires Program Manager approval to share metrics they are hitting on sprints.
+
+These barriers inhibit data democracy. Independently-vetted [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) was created as a workaround.
+
 ### **Confirmations**
 
 PD may capture **data confirmations**.
