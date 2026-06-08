@@ -2,13 +2,13 @@
 
 ## **1. Purpose**
 
-This architecture describes a versatile, easy-to-maintain approach for making institutional knowledge available to AI agents, AI-enabled applications, search platforms, and people across the organization.
+This architecture describes a versatile, low-maintenance approach for making institutional knowledge available to AI agents, AI-enabled applications, search platforms, and people across the organization.
 
 The core goal is **AI-enablement through data democracy**: make it easier for authorized users and tools to find relevant, trusted, and up-to-date knowledge without requiring every AI agent or application to perform expensive, repetitive, and error-prone searches across every source system.
 
 The architecture keeps institutional knowledge in the data sources where it belongs, while using a lightweight **Discovery Layer**, or **DL**, to make common discovery, prioritization, and retrieval tasks faster and more reliable.
 
-DL is a **logical role**, not a particular database. It is the derived data that helps tools find trusted, current, relevant knowledge — plus a catalog of where that derived data lives. That role can be realized on a spectrum of backing stores chosen per output type and scale: a Google Sheet, Confluence page, or Drive doc at small scale; Postgres or BigQuery at large scale.
+DL is a **logical role**, not a particular data source or database. It is the derived data that helps tools find trusted, current, relevant knowledge — plus a catalog of where that derived data lives. That role can be realized on a spectrum of backing stores chosen per output type and scale: a Google Sheet, Confluence page, or Drive doc at small scale; Postgres or BigQuery at large scale.
 
 As a concrete small-scale example: a skill reads a project's Jira tickets, Slack threads, and Confluence pages and writes a computed project summary into a **Google Doc**, marked as AI-generated. A separate **Google Sheet** serves as the catalog — one row per artifact, recording the entry type (`project-summary`), the subject (`project: Atlas`), and the location (the Doc's URL), along with freshness and access-control metadata. An AI agent asked about Project Atlas reads the catalog Sheet, finds the row, and follows the link to the Doc — one lookup instead of re-searching Jira, Slack, and Confluence. Here DL owns no database at all: the computed data lives in a Doc and the catalog lives in a Sheet, both ordinary DSs. The skill writes them under its own Google account, and authorized people can edit the catalog directly under their SSO identity — every change attributed and reversible through the Sheet's version history.
 
@@ -43,7 +43,7 @@ In this model, **new durable knowledge should be added to a DS**, such as a Conf
 
 Similarly, **data corrections should happen in a DS**, not in DL.
 
-Human-verified summaries should also be added to a DS. For example, a project summary might live in Confluence, a Google Doc, or a project-specific source of truth.
+Human-verified, AI-generated summaries should also be added to a DS. For example, a project summary might live in Confluence, a Google Doc, or a project-specific source of truth.
 
 This keeps the architecture simple: DSs remain the places where people create, edit, correct, summarize, and govern institutional knowledge.
 
