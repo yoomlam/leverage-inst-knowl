@@ -8,7 +8,9 @@ The core goal is **AI-enablement through data democracy**: make it easier for au
 
 The architecture keeps institutional knowledge in the data sources where it belongs, while using a lightweight layer of **Precomputed Data**, or **PD**, to make common discovery, prioritization, and retrieval tasks faster and more reliable.
 
-PD is a **logical role**, not a particular database. It is the precomputed data that helps tools find trusted, current, relevant knowledge — plus a catalog of where that precomputed data lives. That role can be realized on a spectrum of backing stores chosen per output type and scale: a Google Sheet, Confluence page, or Drive doc at small scale; Postgres or BigQuery at large scale. Earlier drafts called this a "Precompute Warehouse," which baked in a physical-warehouse assumption this brief no longer makes.
+PD is a **logical role**, not a particular database. It is the precomputed data that helps tools find trusted, current, relevant knowledge — plus a catalog of where that precomputed data lives. That role can be realized on a spectrum of backing stores chosen per output type and scale: a Google Sheet, Confluence page, or Drive doc at small scale; Postgres or BigQuery at large scale.
+
+As a concrete small-scale example: a skill reads a project's Jira tickets, Slack threads, and Confluence pages and writes a computed project summary into a **Google Doc**, marked as AI-generated. A separate **Google Sheet** serves as the catalog — one row per artifact, recording the precompute type (`project-summary`), the subject (`project: Atlas`), and the location (the Doc's URL), along with freshness and access-control metadata. An AI agent asked about Project Atlas reads the catalog Sheet, finds the row, and follows the link to the Doc — one lookup instead of re-searching Jira, Slack, and Confluence. Here PD owns no database at all: the computed data lives in a Doc and the catalog lives in a Sheet, both ordinary DSs. The skill writes them under its own Google account, and authorized people can edit the catalog directly under their SSO identity — every change attributed and reversible through the Sheet's version history.
 
 A secondary goal is **operational BI and reporting**: a deterministic data pipeline can also feed dashboards and structured reporting outputs. This is an explicit, stated goal to capture the deterministic data pipeline (DSs → Pipeline → warehouse → BI Dashboards) that this architecture is inspired by. The warehouse is one realization of PD's backing store — appropriate for the deterministic BI path — not a requirement of the architecture as a whole.
 
@@ -76,7 +78,15 @@ PD is realized on whatever store fits the output, chosen along two axes — **wh
 
 Because PD outputs may be distributed across several stores, a **catalog** records where each kind of precomputed data lives (`precompute-type + subject → location`). Agents read the one catalog, then follow pointers to the right store. The catalog may itself be stored in a DS — a Google Sheet, Confluence page, or Drive doc — so that no dedicated warehouse is required for a small deployment.
 
-The catalog is the new single point of discovery and therefore inherits the governance PD has always required: **service-account-only writes** (humans do not edit it directly), **audit logging**, **access-control metadata**, and **dangling-pointer staleness checks** (a pointer can outlive the artifact it names). A catalog-in-a-DS suits low-cardinality pointers (dozens to low-hundreds of subjects); large per-record pointer sets fall back to an indexed store. The logical-role framing is what lets both realizations coexist without changing the architecture.
+The catalog is the new single point of discovery, but it does not require a bespoke write-governance regime. When the catalog lives in a **version-history DS** (Google Sheets, Confluence), it is treated as **just another DS artifact**: any user with edit access may write it, edit access is governed by the artifact's native sharing (a Google Group), every write is attributed to the writer's SSO identity and logged by the DS's **version history** (who / when / what), and a bad edit is recovered by reverting.
+
+Writers — humans and the skill alike — are ordinary editors. When an automated process or skill writes the catalog and no human attribution is wanted, it uses an ordinary **Google account with its own email address** (`summarizer@navapbc.com`) that behaves like any other human editor: it appears in version history under that email and is governed only by the artifact's native sharing.
+
+This relaxation is **scoped to the catalog and to versioned stores**. A catalog held in a store without native version history (Postgres, BigQuery) keeps the stricter discipline (a governed writer identity, or a built audit/rollback mechanism). It also does **not** extend to confirmation or trust signals, which remain behind an integrity-enforcing service (see below and Section 4.4).
+
+Two properties of the catalog still need care. **Access enforcement does not trust the catalog's stored ACL metadata** — since any editor can alter a row, real access is enforced at the *target store's* native permissions (see Section 7), so a tampered ACL hint cannot widen access. And because version history is **corrective, not preventive** — a bad pointer misdirects every query that hits that subject until someone notices — the skill's regular run **validates catalog entries and dangling pointers** and re-derives the computed rows it owns, bounding the detection window. Hand-authored rows the skill did not compute are not re-derivable, so version-history revert is their only recovery.
+
+A catalog-in-a-DS suits low-cardinality pointers (dozens to low-hundreds of subjects); large per-record pointer sets fall back to an indexed store. The logical-role framing is what lets both realizations coexist without changing the architecture.
 
 #### **Recomputable vs. durable PD**
 
@@ -137,9 +147,12 @@ For write access to DSs, the user's verified SSO identity is likewise used. User
 
 #### Write access to PD
 
-Only explicitly allowed applications and skills can write PD. A **service account email address** is needed for any actor that writes precomputed data, whether the backing store is a warehouse, a Postgres database, or a catalog/artifact stored in a DS. This applies to the catalog as well: humans do not edit it directly. This mechanism reminds users that they shouldn't modify PD directly.
+Write access to PD depends on the backing store, not on a single rule.
 
-Note that a skill which writes **human-readable artifacts into a DS** needs scoped write access to that DS — an expansion from the historical read-broad / write-PD-only skill identity. That write access must be **least-privilege per DS** (only the DSs and locations the skill actually writes) and audit-logged (see Section 5).
+* **Stores without native version history** (a warehouse, a Postgres database): a **governed writer identity** is needed for any actor that writes precomputed data, with the controls in Section 7 (least privilege, rotation, audit logging). This is the path for integrity-critical and durable PD content.
+* **Catalog or artifacts in a version-history DS** (Google Sheets, Confluence): no special regime. The artifact is written like any other DS edit — by any user with native edit access, under their SSO identity, logged and reversible via version history (see Section 2). When a skill or automated process writes such an artifact and no human attribution is wanted, it uses an ordinary **Google account with its own email address** that behaves like any other editor — appearing in version history under that email, governed only by the artifact's native sharing.
+
+Note that a skill which writes **human-readable artifacts into a DS** needs edit access to that DS — an expansion from the historical read-broad / write-PD-only skill identity. That access is the DS's native edit permission (granted via Google Group sharing), least-privilege to the locations the skill actually writes, and audited by the DS's version history (see Section 5).
 
 ### **Optimize for AI-enablement**
 
@@ -238,9 +251,10 @@ At a high level, the architecture has four main flows.
   * New data is added to a DS.
   * Corrections are made in a DS.
   * Human-verified summaries are written to a DS.
-* Applications that write data to PD use a service account email address.
-  * This is needed for any PD write, including writes to a catalog-in-a-DS.
-  * It is not needed for read-only access or for users writing directly to DSs.
+* How PD writes are governed depends on the store (see Section 8).
+  * PD in a non-versioned store (and all confirmation/trust signals) uses a governed writer identity.
+  * A catalog or artifact in a version-history DS is written as an ordinary DS edit — native sharing, version history, SSO identity (a non-human Google account for skill writes).
+  * Neither is needed for read-only access or for users writing directly to DSs.
 
 
 ```mermaid
@@ -306,7 +320,11 @@ The skill is responsible for:
 
 When rebuilding or refreshing PD content, the skill must check the staleness of referenced source data. If the DS content referenced by PD has changed, been deleted, moved, had access controls changed, or otherwise become stale, the relevant PD content should be updated, marked stale, or removed.
 
-**Skill identity and scope.** The skill is the most privileged actor in the system: it reads broadly across DSs and writes PD. Its identity and scope must be defined explicitly and per DS, following least privilege — it should hold only the read access required for the DSs it processes, and only the write access required for the stores and DS locations it actually writes (an expansion over a write-PD-only model once skills write human-readable artifacts into DSs). The skill must capture each item's **source access-control metadata at read time** so that every derived PD artifact is stamped with the correct ACL; failure to do so silently widens access. All skill reads and PD writes must be **audit-logged** for security.
+**Skill identity and scope.** The skill is the most privileged *reader* in the system: it reads broadly across DSs. Its read identity and scope must be defined explicitly and per DS, following least privilege — only the read access required for the DSs it processes. The skill must capture each item's **source access-control metadata at read time** so that every derived PD artifact is stamped with the correct ACL; failure to do so silently widens access.
+
+The skill's **write** posture depends on the target (see Section 8): for stores without version history it uses a governed writer identity with the Section 7 controls; for a catalog or artifact in a version-history DS it writes as an ordinary editor under a **Google account with its own email** (granted native edit access via Google Group sharing, least-privilege to the locations it writes), with the DS's version history serving as the audit log. Reads, and writes to non-versioned stores, must be **audit-logged** for security; writes to version-history DSs are audited by that history.
+
+Because version history is corrective rather than preventive, the skill's regular run also **validates catalog entries and dangling pointers** and re-derives the computed rows it owns, bounding the window in which a bad human or machine edit can misdirect queries.
 
 ---
 
@@ -374,7 +392,7 @@ For PD:
 * PD enforces access based on the propagated metadata where it controls the store; where a PD artifact lives in a DS, that DS's native permissions enforce access.
 * Sensitive computed data should be restricted using Google Groups.
 * Google SSO should be used to identify the requesting user.
-* A service account email address is required for any actor that writes PD, including writes to the catalog and to artifacts stored in a DS.
+* Write governance depends on the store: a governed writer identity is required for stores without native version history; a catalog or artifact in a version-history DS is written like any other DS edit, governed by native sharing and version history (see below and Section 8).
 
 **Access-control freshness contract.** Propagated metadata is a cache, and a stale cache grants access after a DS has revoked it (offboarding, re-share, restriction). To avoid this, **permission-metadata refresh is decoupled from content-staleness refresh** — they have opposite risk profiles (stale content is merely outdated; a stale grant leaks data). For sensitive categories PD either re-validates the caller against the live DS / Google Group permission at query time, or enforces a stated **maximum propagation lag** with a **fail-closed default** (newly restricted content is denied until reconfirmed).
 
@@ -382,7 +400,9 @@ For PD:
 
 This is **harder, not easier, when the artifact lives in a plain DS** (a Google Doc, a Sheet): that store offers only its own sharing settings, with no query-time most-restrictive-intersection enforcement like an authorized view provides. A sensitive aggregation written to a Doc is protected only by that Doc's sharing, which a skill or human must set correctly — an error-prone path. Therefore: aggregations whose mosaic sensitivity exceeds what the target store can enforce should **not** be materialized there. Instead, PD stores **instructions/pointers** directing permitted users to query the underlying DS under their own SSO identity to reconstruct or compute the fuller aggregation at query time. This keeps the sensitive computation under the user's real permissions and keeps PD recomputable.
 
-**PD-write service account controls.** The PD-write service account is a single point of failure for enforcement (a compromised credential can poison ACL metadata, retrieval hints, trust signals, or the catalog for all queries). It must use a secrets strategy that avoids long-lived keys (e.g., Workload Identity Federation for GCP/BigQuery), follow a defined **rotation schedule**, be scoped to **least privilege** (write only to designated PD stores and locations, not full dataset or DS access), and have **audit logging** on all PD writes. The catalog, as the single point of discovery, is governed by these same controls.
+**Governed-writer controls (non-versioned stores).** Where PD lives in a store without native version history — a warehouse, a Postgres database holding integrity-critical or durable content — the writer identity is a single point of failure for enforcement (a compromised credential can poison ACL metadata, retrieval hints, or trust signals for all queries). It must use a secrets strategy that avoids long-lived keys (e.g., Workload Identity Federation for GCP/BigQuery), follow a defined **rotation schedule**, be scoped to **least privilege** (write only to designated PD stores and locations, not full dataset access), and have **audit logging** on all writes.
+
+**Catalog in a version-history DS.** When the catalog lives in a versioned DS, it is *not* governed by the above regime — that is the deliberate simplification of treating it as just another DS artifact (see Section 2). Write access is the artifact's native sharing; audit and rollback are the DS's version history; attribution is the editor's SSO identity (including a non-human Google account for skill writes). Two safeguards replace the service-account controls: access is enforced at the **target store**, never trusting the catalog's editable ACL metadata; and the skill's regular run **validates and re-derives** computed entries, bounding the time a bad edit can misdirect queries. This relaxation applies only to the catalog and only to versioned stores; it does not extend to confirmation or trust signals.
 
 This keeps access control understandable and avoids building a parallel authorization system.
 
@@ -420,7 +440,7 @@ A skill may write a **computed, human-readable artifact** — an AI-generated su
 
 * **Provenance-marked as AI-generated**, so people do not mistake it for human-verified knowledge and so skills do not recompute on their own prior output.
 * **Registered in the catalog**, so tools can discover it.
-* **Written by a service account**, not a human identity.
+* **Written under a clear identity** — either the running user's SSO identity (attended runs) or an ordinary **non-human Google account** (unattended runs) — governed by the DS's native sharing and logged by its version history.
 
 This is distinct from a human-verified summary: the artifact is unverified computed output until a human reviews it, at which point it becomes human-verified DS content under the human's own identity.
 
@@ -432,11 +452,15 @@ A confirmation means a user has indicated that a retrieved result, ranking, cate
 
 Confirmations originate in PD and have no DS source, so they are **durable PD-origin data** that cannot be rebuilt from DSs and require their own backup and retention (see Section 2). Each confirmation write must carry the confirming user's verified SSO identity, be rate-limited, and record provenance (see Section 4.4) so the signal cannot be anonymously poisoned. Because a bare Sheet or Doc cannot enforce identity, rate-limiting, or provenance, confirmations require a store fronted by an enforcing service.
 
+### **The Catalog**
+
+The catalog is the one PD artifact that **any user with edit access may write directly**, when it lives in a version-history DS (Google Sheets, Confluence). Edit access is the artifact's native sharing (a Google Group); every write is attributed to the editor's SSO identity and logged by version history; a bad edit is reverted from that history. The skill writes it as a peer editor under a non-human Google account. This is the deliberate simplification of treating the catalog as just another DS artifact (see Sections 2 and 7) — no service-account regime, because the DS already supplies identity, audit, and rollback. It applies only to versioned stores; a catalog in a non-versioned store keeps a governed writer identity.
+
 ### **PD Writes**
 
 PD should only receive computed data, the catalog, and confirmation signals.
 
-Any actor that writes PD — to a warehouse, a database, a catalog-in-a-DS, or an artifact in a DS — uses a service account email address. Read-only applications and users writing directly to DSs do not need a service account email address.
+How a PD write is governed depends on the store. A catalog or human-readable artifact in a **version-history DS** is written as an ordinary DS edit (native sharing + version history + SSO identity, including a non-human Google account for skill writes). PD content in a **non-versioned store** — and all confirmation/trust signals — uses a governed writer identity with the Section 7 controls. Read-only applications and users writing directly to DSs need no special identity.
 
 PD should not receive canonical new knowledge, human-authored corrections, or human-verified summaries.
 
@@ -512,3 +536,4 @@ The result is a practical, versatile architecture that improves AI access to ins
 
 - **Catalog format and scale ceiling.** The catalog-in-a-DS realization is undefined as a concrete format (Sheet schema vs. structured Confluence page vs. doc convention), and its low-cardinality ceiling is unquantified. Define the format, the subject-count threshold at which it must migrate to an indexed store, and the migration path — so the lightweight realization doesn't silently become a scaling bottleneck.
 - **Provenance marking convention.** "Provenance-marked as AI-generated" needs a concrete, per-DS convention (a label, a page property, a naming pattern) that both humans and skills can read reliably, plus the rule by which a human review promotes an AI-generated artifact to human-verified.
+- **User-writable catalog: detection and recovery.** Dropping the service-account regime for a versioned-DS catalog trades prevention for correction, which only works if a bad edit is *noticed*. Define the detection cadence and trigger (skill validation pass each run vs. edit alerting on the artifact), who or what is authorized to revert, and how the skill reconciles human-authored rows it cannot re-derive with the computed rows it owns. State the acceptable bound on the window during which a bad pointer can misdirect queries — this is the catalog analogue of the Section 7 permission-leak window.
