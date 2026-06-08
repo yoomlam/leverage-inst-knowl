@@ -51,6 +51,8 @@ This keeps the architecture simple: DSs remain the places where people create, e
 
 **Discovery Layer**, or **DL**, is a computed layer derived from DSs. It is a **logical role**, not a single store: it comprises the computed outputs that speed up retrieval, plus a **catalog** that tells tools where each kind of computed output lives.
 
+DL data is generally AI-generated — produced by skills that read DSs and compute indexes, summaries, pointers, and signals — and is provenance-marked as such (see Section 8). But users may also author DL data directly, such as a hand-curated index or a manually corrected catalog entry. User-authored DL data is indicated with a tag (or label) marking it as DL data, along with a tag indicating that it is human-created rather than AI-generated, so tools and people can tell the two apart and weigh them accordingly. The tag travels with the entry: AI-generated is the default, and human authorship is the explicit, labeled exception.
+
 DL content may include:
 
 * Aggregations across DSs.
@@ -66,12 +68,41 @@ DL content may include:
 
 DL helps AI agents and applications avoid spending unnecessary time, tokens, and effort searching across many systems, following dead ends, or repeatedly recomputing common retrieval signals.
 
+#### **Tags and labels**
+
+The architecture implies a small set of tags that travel with DL content so tools and people can weigh, route, and govern it. None require a bespoke system — they are realized as whatever the backing store supports (a catalog column, a Doc/Confluence label or page property, a row field).
+
+**Provenance and verification** (mutually informing, travel with every artifact):
+
+* **AI-generated** — the default for all DL content. Marks computed output so people do not mistake it for human-verified knowledge and so skills do not recompute on their own prior output.
+* **Human-created** — the explicit, labeled exception: DL data a user authored directly (a hand-curated index, a manually corrected catalog row), so tools weigh it differently from machine output.
+* **Human-verified** — set when a person reviews an AI-generated artifact, promoting it from unverified computed output to verified content under that person's identity (see Section 8).
+* **DL-data marker** — marks an artifact stored in a DS as derived DL content rather than DS-native source of truth, so the two remain distinguishable where they sit side by side.
+
+**Lifecycle and trust:**
+
+* **Freshness / staleness** — current vs. stale; the skill marks an artifact stale when its source has changed, moved, lost access, or been deleted (see Section 5).
+* **Obsolescence indicator** — content that is superseded or no longer valid, distinct from merely stale.
+* **Trust / confirmation signal** — accumulated user confirmations and trust metadata that influence ranking (see Sections 4.4 and 8).
+
+**Classification and discovery:**
+
+* **Entry type and subject** — the catalog's `type + subject` keys (e.g., type `project-summary`, subject `project: Atlas`) that let a tool find the right derived output.
+* **Category** — a categorization label used both to organize DL content and as an admin ACL-mapping criterion (see Section 3).
+
+**Access control:**
+
+* **Propagated access-control metadata** — the source group memberships stamped onto each artifact at read time. Used as a hint for filtering, but never trusted alone — enforcement falls to the target store's native permissions (see Section 7).
+* **Restricted-by-default / sensitivity** — cross-source aggregations inherit the most-restrictive intersection of their inputs' access groups and stay restricted until explicitly cleared (see Section 7).
+
+(The concrete per-DS convention for these — a label, a page property, a naming pattern — is a deferred question; see the end of this document.)
+
 #### **Pluggable backing store**
 
 DL is realized on whatever store fits the output, chosen along two axes — **who consumes it** and **how much integrity it requires**:
 
 * **Human-readable computed artifacts** — summaries, digests, curated indexes meant for people to read — may live in any DS where people already work (a Google Doc, a Confluence page). They must be **provenance-marked as AI-generated** (see Section 8) so they are not mistaken for human-verified knowledge and so skills do not later recompute on their own output.
-* **Integrity-critical signals** — confirmations and trust metadata that influence ranking for all users — must live in a store fronted by a service that can enforce **verified-SSO identity, rate-limiting, and provenance** (see Section 4.4). A bare Sheet or Doc cannot enforce any of that, so these signals require a real store (e.g., Postgres) with an application in front. "Any store" holds for human-readable artifacts; it does **not** hold for integrity-critical signals.
+* **Integrity-critical signals** — confirmations and trust metadata that influence ranking for all users — default to a **version-history DS** (a Sheet or Doc): native sharing gates who may write, every write is attributed to an SSO identity, version history is the audit log, and a bad edit is recovered by reverting — the same attribution-and-correction model used for the catalog (see below). This also keeps the signals transparent and directly user-modifiable. What a Sheet or Doc does *not* provide is write-time enforcement — rate-limiting and enforced provenance — and, because these signals are non-recomputable (see "Recomputable vs. durable DL"), revert is their only recovery. When that gap matters — large scale, untrusted or cross-org writers, or high-stakes ranking where poisoning resistance justifies the build — an **option** is a store fronted by a service that enforces **verified-SSO identity, rate-limiting, and provenance** at write time (e.g., Postgres with an application in front; see Section 4.4).
 * **Machine retrieval signals** — indexes, pointers, retrieval hints — are read by no human; the choice of Sheet vs. Postgres vs. BigQuery here is a storage-engine decision driven by scale, not an architectural one.
 
 #### **The catalog**
@@ -82,7 +113,7 @@ The catalog is the new single point of discovery, but it does not require a besp
 
 Writers — humans and the skill alike — are ordinary editors. When an automated process or skill writes the catalog and no human attribution is wanted, it uses an ordinary **Google account with its own email address** (`summarizer@navapbc.com`) that behaves like any other human editor: it appears in version history under that email and is governed only by the artifact's native sharing.
 
-This relaxation is **scoped to the catalog and to versioned stores**. A catalog held in a store without native version history (Postgres, BigQuery) keeps the stricter discipline (a governed writer identity, or a built audit/rollback mechanism). It also does **not** extend to confirmation or trust signals, which remain behind an integrity-enforcing service (see below and Section 4.4).
+This relaxation is **scoped to versioned stores**. A catalog held in a store without native version history (Postgres, BigQuery) keeps the stricter discipline (a governed writer identity, or a built audit/rollback mechanism). The same versioned-DS model extends to confirmation and trust signals (see "Pluggable backing store" above and Section 4.4), with one difference: those signals are non-recomputable, so the skill's re-derivation safety net does not cover them and revert is their only recovery.
 
 Two properties of the catalog still need care. **Access enforcement does not trust the catalog's stored ACL metadata** — since any editor can alter a row, real access is enforced at the *target store's* native permissions (see Section 7), so a tampered ACL hint cannot widen access. And because version history is **corrective, not preventive** — a bad pointer misdirects every query that hits that subject until someone notices — the skill's regular run **validates catalog entries and dangling pointers** and re-derives the computed rows it owns, bounding the detection window. Hand-authored rows the skill did not compute are not re-derivable, so version-history revert is their only recovery.
 
@@ -92,7 +123,7 @@ A catalog-in-a-DS suits low-cardinality pointers (dozens to low-hundreds of subj
 
 Most DL content is **recomputable**: indexes, aggregations, categorization, retrieval hints, the catalog, and propagated access-control metadata can all be rebuilt from DSs if DL is deleted.
 
-However, **data confirmation signals** (see Section 8) originate in DL from user feedback and do not exist in any DS. They are **durable DL-origin data**, not recomputable output, and therefore require their own backup and retention. The "rebuild from DSs" property applies only to the recomputable subset; durable DL-origin data must be preserved independently — which is a further reason it lives in an integrity-enforcing store rather than a Sheet.
+However, **data confirmation signals** (see Section 8) originate in DL from user feedback and do not exist in any DS. They are **durable DL-origin data**, not recomputable output, and therefore require their own backup and retention regardless of where they live. The "rebuild from DSs" property applies only to the recomputable subset; durable DL-origin data must be preserved independently — version history plus a periodic export when it lives in a Sheet or Doc, or ordinary backups when it lives in a served store. Being non-recomputable also means revert is the only recovery for a bad edit, since the skill cannot re-derive it.
 
 ---
 
@@ -110,7 +141,7 @@ It should not become a manually maintained knowledge base. This holds even when 
 
 ### **Choose the backing store per output type**
 
-DL is a logical role with a pluggable backing store. Pick the store by consumer and integrity need, not by default: human-readable artifacts where people read them, integrity-critical signals behind an enforcing service, machine signals wherever scale dictates. Keep the catalog as the one known place to discover all of it.
+DL is a logical role with a pluggable backing store. Pick the store by consumer and integrity need, not by default: human-readable artifacts where people read them, integrity-critical signals in a version-history DS by default (an enforcing service when scale or poisoning resistance demands it), machine signals wherever scale dictates. Keep the catalog as the one known place to discover all of it.
 
 ### **Keep access control simple**
 
@@ -123,7 +154,9 @@ Access should be implemented by:
 3. Propagating the relevant access-control metadata from DSs into DL.
 4. Enforcing those permissions when DL is queried.
 
-**Per-DS ACL mapping is required.** Most DSs do not natively express permissions as Google Groups — Slack uses channel membership, Jira/Confluence use Atlassian roles and permission schemes, Salesforce uses profiles and sharing rules, and Workday/Greenhouse/Unanet use their own role models. For each DS, document whether native Google-Group attachment is possible and, where it is not, define how that system's native ACLs are normalized into the propagated access-control metadata. For the majority of DSs the admin mapping process below is the **primary** mechanism, not an exception, and should be scoped as such.
+**Per-DS ACL mapping is required wherever DL serves derived data from its own store.** Enforcement splits by realization. When DL **points to a DS** or the artifact **lives in a DS** (a summary in a Doc, the catalog or confirmation signals in a Sheet), the user reads under their own SSO identity and the **DS's native permissions enforce** — no Google-Group normalization is needed. But when DL **materializes derived data in its own queryable store** (a warehouse, an indexed Postgres/BigQuery store), that store cannot see source-native ACLs, so each contributing DS's permissions must be normalized into the propagated access-control metadata DL filters on at query time (see Section 4.3).
+
+Most DSs do not natively express permissions as Google Groups — Slack uses channel membership, Jira/Confluence use Atlassian roles and permission schemes, Salesforce uses profiles and sharing rules, and Workday/Greenhouse/Unanet use their own role models. For each DS that feeds a materialized DL store, document whether native Google-Group attachment is possible and, where it is not, define how that system's native ACLs are normalized via the admin mapping process below. For those DSs the mapping is the **primary** mechanism, not an exception, and should be scoped as such.
 
 When it is not possible to attach a Google Group directly to particular data in a DS, an admin mapping process applies Google Group access controls when defined criteria are met. This process must have a **named owner**, must **default to deny** for any record that matches no criterion (records are never ingested as world-readable by default), and must define **conflict resolution** when multiple criteria apply (most-restrictive wins). Example criteria include:
 
@@ -149,8 +182,8 @@ For write access to DSs, the user's verified SSO identity is likewise used. User
 
 Write access to DL depends on the backing store, not on a single rule.
 
-* **Stores without native version history** (a warehouse, a Postgres database): a **governed writer identity** is needed for any actor that writes derived data, with the controls in Section 7 (least privilege, rotation, audit logging). This is the path for integrity-critical and durable DL content.
-* **Catalog or artifacts in a version-history DS** (Google Sheets, Confluence): no special regime. The artifact is written like any other DS edit — by any user with native edit access, under their SSO identity, logged and reversible via version history (see Section 2). When a skill or automated process writes such an artifact and no human attribution is wanted, it uses an ordinary **Google account with its own email address** that behaves like any other editor — appearing in version history under that email, governed only by the artifact's native sharing.
+* **Stores without native version history** (a warehouse, a Postgres database): a **governed writer identity** is needed for any actor that writes derived data, with the controls in Section 7 (least privilege, rotation, audit logging). This is the path for integrity-critical or durable DL content held in a served store — the option taken when write-time enforcement is wanted for confirmation or trust signals.
+* **Catalog, confirmation/trust signals, or other artifacts in a version-history DS** (Google Sheets, Confluence): no special regime — the default for these. The artifact is written like any other DS edit — by any user with native edit access, under their SSO identity, logged and reversible via version history (see Section 2). When a skill or automated process writes such an artifact and no human attribution is wanted, it uses an ordinary **Google account with its own email address** that behaves like any other editor — appearing in version history under that email, governed only by the artifact's native sharing. Confirmation and trust signals carry the caveat that they are non-recomputable, so revert is their only recovery.
 
 Note that a skill which writes **human-readable artifacts into a DS** needs edit access to that DS — an expansion from the historical read-broad / write-DL-only skill identity. That access is the DS's native edit permission (granted via Google Group sharing), least-privilege to the locations the skill actually writes, and audited by the DS's version history (see Section 5).
 
@@ -173,7 +206,7 @@ Authorized users should be able to use AI-enabled tools to access institutional 
 - MCP Services ↔ DSs
 - MCP Services ↔ DL
 - AI tools read the DL catalog, then follow pointers to the right store
-- Confirmations go to an integrity-enforcing DL store
+- Confirmations go to a version-history DS by default, or an integrity-enforcing DL store at scale
 - Durable updates go to DSs
 
 ```mermaid
@@ -244,15 +277,15 @@ At a high level, the architecture has four main flows.
 ### **4.4 User Feedback and Source Updates**
 
 * Users may confirm whether retrieved data, rankings, or computed signals are useful or accurate.
-  * These confirmation signals are stored in an integrity-enforcing DL store.
+  * These confirmation signals are stored in a **version-history DS** (a Sheet or Doc) by default, or in an integrity-enforcing DL store when write-time enforcement is needed (see below).
   * Confirmations may improve future ranking, trust, and retrieval behavior.
-  * Because confirmations influence ranking and trust for all users, each confirmation write must carry the **verified SSO identity** of the confirming user (the same token mechanism used for reads), be **rate-limited**, and record **provenance** so confirmations can be attributed and, if needed, discounted or revoked. This prevents anonymous poisoning of the retrieval layer — and is why confirmation signals require a store fronted by an enforcing service rather than a bare Sheet or Doc.
+  * Because confirmations influence ranking and trust for all users, each write must be **attributed** so a signal can later be discounted or revoked. In the default Sheet/Doc realization, attribution and recovery come from the DS itself: native sharing gates who may write, every edit carries the writer's SSO identity, version history is the audit log, and a bad edit is reverted — the same model as the catalog. What this does not add is write-time **rate-limiting** or enforced **provenance**, and because confirmations are non-recomputable, revert is the only recovery. When poisoning resistance matters more than transparency — large scale, untrusted or cross-org writers, high-stakes ranking — the **option** is a store fronted by a service that carries the **verified SSO identity** of the confirming user (the same token mechanism used for reads), **rate-limits** writes, and records **provenance** at write time.
 * Durable updates happen in DSs.
   * New data is added to a DS.
   * Corrections are made in a DS.
   * Human-verified summaries are written to a DS.
 * How DL writes are governed depends on the store (see Section 8).
-  * DL in a non-versioned store (and all confirmation/trust signals) uses a governed writer identity.
+  * DL in a non-versioned store uses a governed writer identity; confirmation/trust signals follow the store they live in — version history when in a Sheet/Doc, a governed writer identity when in a served store.
   * A catalog or artifact in a version-history DS is written as an ordinary DS edit — native sharing, version history, SSO identity (a non-human Google account for skill writes).
   * Neither is needed for read-only access or for users writing directly to DSs.
 
@@ -402,7 +435,7 @@ This is **harder, not easier, when the artifact lives in a plain DS** (a Google 
 
 **Governed-writer controls (non-versioned stores).** Where DL lives in a store without native version history — a warehouse, a Postgres database holding integrity-critical or durable content — the writer identity is a single point of failure for enforcement (a compromised credential can poison ACL metadata, retrieval hints, or trust signals for all queries). It must use a secrets strategy that avoids long-lived keys (e.g., Workload Identity Federation for GCP/BigQuery), follow a defined **rotation schedule**, be scoped to **least privilege** (write only to designated DL stores and locations, not full dataset access), and have **audit logging** on all writes.
 
-**Catalog in a version-history DS.** When the catalog lives in a versioned DS, it is *not* governed by the above regime — that is the deliberate simplification of treating it as just another DS artifact (see Section 2). Write access is the artifact's native sharing; audit and rollback are the DS's version history; attribution is the editor's SSO identity (including a non-human Google account for skill writes). Two safeguards replace the service-account controls: access is enforced at the **target store**, never trusting the catalog's editable ACL metadata; and the skill's regular run **validates and re-derives** computed entries, bounding the time a bad edit can misdirect queries. This relaxation applies only to the catalog and only to versioned stores; it does not extend to confirmation or trust signals.
+**Catalog in a version-history DS.** When the catalog lives in a versioned DS, it is *not* governed by the above regime — that is the deliberate simplification of treating it as just another DS artifact (see Section 2). Write access is the artifact's native sharing; audit and rollback are the DS's version history; attribution is the editor's SSO identity (including a non-human Google account for skill writes). Two safeguards replace the service-account controls: access is enforced at the **target store**, never trusting the catalog's editable ACL metadata; and the skill's regular run **validates and re-derives** computed entries, bounding the time a bad edit can misdirect queries. This relaxation applies to versioned stores generally — the catalog by default, and confirmation or trust signals when they live in a Sheet or Doc rather than behind an enforcing service. (Confirmation and trust signals are non-recomputable, so the re-derivation safeguard does not apply to them; revert is their only recovery.)
 
 This keeps access control understandable and avoids building a parallel authorization system.
 
@@ -460,7 +493,7 @@ DL may capture **data confirmations**.
 
 A confirmation means a user has indicated that a retrieved result, ranking, categorization, or computed signal was useful, accurate, or relevant. These confirmations can improve future ranking, trust, and retrieval behavior.
 
-Confirmations originate in DL and have no DS source, so they are **durable DL-origin data** that cannot be rebuilt from DSs and require their own backup and retention (see Section 2). Each confirmation write must carry the confirming user's verified SSO identity, be rate-limited, and record provenance (see Section 4.4) so the signal cannot be anonymously poisoned. Because a bare Sheet or Doc cannot enforce identity, rate-limiting, or provenance, confirmations require a store fronted by an enforcing service.
+Confirmations originate in DL and have no DS source, so they are **durable DL-origin data** that cannot be rebuilt from DSs and require their own backup and retention regardless of store (see Section 2). Because confirmations influence ranking for all users, each write must be **attributed** so a signal can be discounted or revoked. By default they live in a **version-history DS** (a Sheet or Doc): native sharing gates writers, every edit carries an SSO identity, version history audits, and revert recovers a bad edit — which also keeps the signals transparent and directly user-editable. Since they are non-recomputable, revert is the only recovery. When write-time enforcement is worth the build — large scale, untrusted writers, high-stakes ranking — the **option** is a store fronted by a service that enforces verified SSO identity, rate-limiting, and provenance (see Section 4.4).
 
 ### **The Catalog**
 
@@ -470,7 +503,7 @@ The catalog is the one DL artifact that **any user with edit access may write di
 
 DL should only receive computed data, the catalog, and confirmation signals.
 
-How a DL write is governed depends on the store. A catalog or human-readable artifact in a **version-history DS** is written as an ordinary DS edit (native sharing + version history + SSO identity, including a non-human Google account for skill writes). DL content in a **non-versioned store** — and all confirmation/trust signals — uses a governed writer identity with the Section 7 controls. Read-only applications and users writing directly to DSs need no special identity.
+How a DL write is governed depends on the store. A catalog, confirmation/trust signal, or human-readable artifact in a **version-history DS** is written as an ordinary DS edit (native sharing + version history + SSO identity, including a non-human Google account for skill writes). DL content in a **non-versioned store** — including confirmation/trust signals when they are placed there for write-time enforcement — uses a governed writer identity with the Section 7 controls. Read-only applications and users writing directly to DSs need no special identity.
 
 DL should not receive canonical new knowledge, human-authored corrections, or human-verified summaries.
 
@@ -512,7 +545,7 @@ A simple MVP should include:
 11. Allow a user or AI agent to run the skill directly.
 12. Populate DL with computed aggregations, indexes, categories, source pointers, freshness metadata, trust signals, and confirmation signals — choosing the backing store per output type and integrity need.
 13. Expose DSs and DL through MCP services for AI tool access.
-14. Store data confirmations from one pilot AI-enabled app, in an integrity-enforcing store.
+14. Store data confirmations from one pilot AI-enabled app — in a version-history DS by default, or an integrity-enforcing store if write-time enforcement is needed.
 15. Require additions, corrections, and human-verified summaries to happen in DSs; provenance-mark any AI-generated artifact written into a DS.
 16. Test with one or two AI-enabled search or assistant workflows.
 
@@ -524,7 +557,7 @@ The MVP should prove that DL improves retrieval quality, speed, and trust withou
 
 This architecture supports AI-enablement and data democracy while keeping the system simple.
 
-DSs remain authoritative. DL is a recomputable computed layer — a logical role with a pluggable backing store — that helps AI agents and applications quickly find relevant, prioritized, trusted, current, and authorized institutional knowledge. A catalog locates the derived data, which may be distributed across stores chosen per output type and integrity need: human-readable artifacts in DSs where people read them, integrity-critical signals behind an enforcing service, deterministic BI artifacts in a warehouse. DSs and DL are exposed through MCP services as the main query path for AI tools. New data, corrections, and human-verified summaries happen in DSs. DL stores computed data, the catalog, and confirmation signals. Deterministic DL artifacts are updated through regular data pipelines, while AI-assisted DL content is updated by scheduled or manually-run AI skills. Google SSO and Google Groups provide the access-control foundation, with access metadata propagated into DL for enforcement.
+DSs remain authoritative. DL is a recomputable computed layer — a logical role with a pluggable backing store — that helps AI agents and applications quickly find relevant, prioritized, trusted, current, and authorized institutional knowledge. A catalog locates the derived data, which may be distributed across stores chosen per output type and integrity need: human-readable artifacts in DSs where people read them, integrity-critical signals in a version-history DS by default (an enforcing service when scale or poisoning resistance demands it), deterministic BI artifacts in a warehouse. DSs and DL are exposed through MCP services as the main query path for AI tools. New data, corrections, and human-verified summaries happen in DSs. DL stores computed data, the catalog, and confirmation signals. Deterministic DL artifacts are updated through regular data pipelines, while AI-assisted DL content is updated by scheduled or manually-run AI skills. Google SSO and Google Groups provide the access-control foundation, with access metadata propagated into DL for enforcement.
 
 The result is a practical, versatile architecture that improves AI access to institutional knowledge without overbuilding a complex new knowledge management system.
 
@@ -539,7 +572,7 @@ The result is a practical, versatile architecture that improves AI access to ins
   - **Signal-type prioritization.** The 10 DL signal types are listed as a flat peer set. If building, partition them into MVP-required (e.g., indexes, source pointers, access-control metadata), second-iteration (freshness, trust, categorization), and post-validation (confirmation signals, retrieval hints, search optimization).
   - **AI-skill responsibilities.** The skill bundles ETL, a trust/ranking engine, ACL propagation, and now backing-store selection plus catalog registration in one component. If building, decide whether to narrow its MVP scope (read content, compute indexes/pointers, propagate ACLs, register catalog entries) and split staleness/trust/rebuild into follow-on concerns.
   - **DS selection criteria.** "Select a small number of high-value DSs" is undefined. If building, define explicit MVP DS-selection criteria (connector availability, Group-support, coverage of the pilot workflow) and annotate the Section 2 list with pilot-eligible vs. future sources.
-  - **Confirmation loop in the MVP.** Capturing confirmations needs a UI affordance, write endpoint, schema, an integrity-enforcing store, and a consumer that are not scoped, and is not required to prove retrieval improvement. If building, consider deferring the confirmation loop to a post-MVP iteration.
+  - **Confirmation loop in the MVP.** Capturing confirmations needs a UI affordance, a write path, schema, a store (a Sheet/Doc by default, or an integrity-enforcing store if write-time enforcement is needed), and a consumer that are not scoped, and is not required to prove retrieval improvement. If building, consider deferring the confirmation loop to a post-MVP iteration.
 - **Staleness / change-detection mechanism is underspecified.** Specify a per-DS change-detection strategy (CDC / webhooks / delta tokens rather than full re-reads), identify which DSs lack delta primitives (e.g., Slack, Gmail) and how they are handled, state a target refresh interval (which also sets the permission-leak window in the Section 7 freshness contract), and define error-path semantics that distinguish 403 (access lost) from 404 (deleted) from transient 5xx with retry/backoff so a transient outage does not purge valid DL content. Catalog pointers need the same treatment: a pointer can dangle when its target artifact is moved or deleted.
 
 ### From 2026-06-08 reframe
