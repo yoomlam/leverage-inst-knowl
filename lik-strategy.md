@@ -1,6 +1,21 @@
 # Institutional Knowledge for AI Enablement — Implementation Strategy
 
-An implementation **strategy** for [lik-architecture-concise.md](lik-architecture-concise.md). It starts by *buying* (Layer 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level is independently useful, adds one capability, and is justified by a limitation in the level before it.
+**The problem.** Institutional knowledge is scattered across many systems. To answer a question, every AI agent, app, and person has to search all of them — repeatedly and redundantly. That is slow, token-expensive, inconsistent across tools, and prone to missing the trusted or current answer. We want that knowledge reliably discoverable and retrievable for AI agents and people alike — *without* creating a second source of truth or copying everything into one place.
+
+**Key terms.**
+- **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed: Google Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, etc. They remain the **source of truth**; all durable writes happen here.
+- **Discovery Layer (DL)** — a lightweight, *computed* layer **derived from the DSs** (indexes, aggregations, freshness/trust signals, pointers) that makes discovery and retrieval faster. It is never a second source of truth, and most of it is recomputable from the DSs at any time.
+- **Catalog** — DL's "yellow pages": a single well-known lookup mapping `type + subject → location`, so a consumer can find *where* any DL output lives without searching every store.
+- **MCP** (Model Context Protocol) — the service interface through which agents and apps read and write DSs (and later DL) under a verified user identity.
+
+Other acronyms used below:
+- **ACL** (access control list) — the per-record permissions a system stores: who may read or write what.
+- **SSO** (single sign-on) — one verified login across systems; here, **Google SSO** + **Google Groups** for role/permission grouping.
+- **OIDC / OAuth** — the standard identity/authorization protocols that produce the verified token carrying the user's identity.
+- **BI** (business intelligence) — operational dashboards and reporting (the Parallel Track).
+- **SaaS** (software as a service) — a vendor-hosted commercial tool, as opposed to a self-hosted one.
+
+**The strategy.** This is an implementation **strategy** for [lik-architecture-concise.md](lik-architecture-concise.md). It starts by *buying* (Layer 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level is independently useful, adds one capability, and is justified by a limitation in the level before it.
 
 The strategy is deliberately falsifiable: ship a layer, learn from it, and only spend on the next if the prior one proved the need. Every layer ends with a **limitation** — the reason the next one exists.
 
@@ -22,11 +37,12 @@ Commercial enterprise-search / AI-retrieval products already ingest these DSs, e
 
 **How to run it:** pick a pilot user group, connect a few high-value DSs, and have users log real questions and rate the answers. Track precisely *where* it fails — which data sources it can't reach, which questions come back wrong/stale/incomplete, which permissions it can't honor.
 
-> **Limitation.** A turnkey tool is a black box -- possible limitations may be: you can't change its ranking, you can't add cross-source aggregations or trust signals it doesn't natively support, and — for index-based tools — it maintains its own index of your content, effectively a copy and a bulk re-export surface (confirm each tool's data-handling model; some federate queries at read time instead of copying — apply the third-party trust-boundary controls in 1.3 where a copy exists). The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Layer 0.
-
-- Index-based enterprise search (Glean, and GoSearch) ingests/crawls connected sources into its own search index — that is a derived copy, with source ACLs mirrored into it.
-- Federated / connector modes (SearchUnify supports this, and others offer it) query sources at read time and don't persist a full copy.
-- Many are hybrid, and the data-handling model is a procurement/config detail you'd confirm per tool.
+> **Limitation.** A turnkey tool is a black box — possible limitations include: you can't change its ranking, and you can't add cross-source aggregations or trust signals it doesn't natively support. Its **data-handling model** also matters and varies per tool — confirm it during evaluation, and apply the third-party trust-boundary controls in 1.3 wherever a copy exists:
+>   - *Index-based* (e.g., Glean, GoSearch) ingests/crawls sources into its own search index — a derived copy with source ACLs mirrored in, and a bulk re-export surface.
+>   - *Federated / connector* (e.g., SearchUnify) queries sources at read time and doesn't persist a full copy.
+>   - Many are *hybrid*.
+>
+> The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Layer 0.
 
 ---
 
