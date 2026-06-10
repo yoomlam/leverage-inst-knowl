@@ -42,7 +42,7 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 
 It is the one un-pointed-to artifact, so it must live at a **well-known address** agents know a priori; everything else is discovered through it. It starts as a **single Google Sheet** so no warehouse is needed at small scale.
 
-When in a **version-history DS**, it is treated as **just another DS artifact**: any user with native edit access may write it, edits are attributed via SSO identity and logged by version history, and a bad edit is reverted. A skill writing it uses an ordinary **non-human Google account** (e.g., `summarizer@navapbc.com`) that appears in version history like any editor.
+When in a **version-history DS**, it is treated as **just another DS artifact**, with one tightening: because it's the single entry point every consumer hits first, **write access is limited to the DL skill's service account and a small set of named catalog owners** — reads stay open for transparency, edits are attributed via SSO identity and logged by version history, and a bad edit is reverted. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring. The skill writes it under an ordinary **non-human Google account** (e.g., `summarizer@navapbc.com`) that appears in version history like any editor.
 
 Two safeguards replace a write-governance regime:
 1. **Access enforcement never trusts the catalog's stored ACL metadata** — real access is enforced at the *target store* (§7), so a tampered hint can't widen access.
@@ -69,7 +69,7 @@ The same column set applies in both realizations — Sheet columns first, a real
 | `source_refs` | text[] / JSON | The DS records this output derived from (IDs/URLs + version/etag where available). **Powers staleness checks and re-derivation.** |
 | `last_computed_at` | timestamp | When the skill last (re)derived this entry. |
 | `last_validated_at` | timestamp | When the skill last confirmed the pointer resolves and sources are unchanged. |
-| `access_groups` | text[] | Propagated ACL **hint** — most-restrictive intersection of source groups. *Never trusted for enforcement* (§7); routing/filtering only. |
+| `access_groups` | text[] | Propagated ACL **hint** — the output's single assigned audience group (no runtime intersection; §7). *Never trusted for enforcement*; routing/filtering only. |
 | `sensitivity` | enum | `restricted` (default) \| `cleared`. Restricted-by-default until explicitly cleared. |
 | `category` | text (nullable) | Classification + admin ACL-mapping criterion. |
 | `computed_by` | text | The skill/pipeline that owns this row (distinguishes re-derivable rows from hand-authored ones). |
@@ -84,7 +84,7 @@ The same column set applies in both realizations — Sheet columns first, a real
 4. **`row_provenance` / `computed_by` resolve the hand-authored-row reconciliation** (Open Questions §11): the skill re-derives only `row_provenance = 'skill'` rows it owns and leaves human rows to revert-based recovery.
 
 #### Recomputable vs. durable DL
-Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hints, catalog, propagated ACLs). **Confirmation signals** originate in DL from user feedback and exist in no DS — they are **durable DL-origin data** requiring their own backup/retention, and revert is their only recovery for a bad edit.
+Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hints, catalog, propagated ACLs). The exceptions are **durable DL-origin data** that exist in no DS: **confirmation signals** (from user feedback) and **human-created** artifacts (hand-authored DL outputs, not recomputable). These require their own backup/retention, and revert is the only recovery for a bad edit.
 
 ## 3. Design Principles
 
@@ -97,7 +97,7 @@ Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hin
 - **Enable data democracy** — authorized users reach knowledge without knowing where each artifact lives.
 
 ### Identity rules
-- **Read:** MCP services require a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes access. Identity is carried across each agent → MCP → DL hop (token passthrough / on-behalf-of). Applies equally to AI agents and automation (e.g., Zapier).
+- **Read:** MCP services require a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes access. Identity is carried across each agent → MCP → DL hop via **on-behalf-of token exchange** — each MCP service exchanges the verified Google token for a store-native token, since a DS won't accept a Google-audience token directly. Applies equally to AI agents and automation (e.g., Zapier).
 - **Write to DSs:** the user's verified SSO identity, via the DS's normal permissions.
 - **Write to DL:** depends on the store —
   - *Non-versioned store* (warehouse, Postgres): a **governed writer identity** with §7 controls.
@@ -138,7 +138,7 @@ Primary path is MCP services to DSs and DL. Examples:
 - **Commercial apps** — Glean, GoSearch, SearchUnify.
 - **Self-hosted platforms** — Onyx CE, PipesHub, SWIRL.
 
-**Third-party integration trust boundary.** External tools are a distinct trust zone. Because DL aggregates across DSs, connecting one uncontrolled creates a bulk re-export path for source-restricted data. For each external consumer define: **credential scope** (least-privilege slice), **data minimization** (which portion of DL, not all), **retention/training constraints**, and **breach containment**. Tools that query under their own service credentials must faithfully proxy the end-user's identity so DL enforcement is not bypassed.
+**Third-party integration trust boundary.** External tools are a distinct trust zone. Because DL aggregates across DSs, connecting one uncontrolled creates a bulk re-export path for source-restricted data. For each external consumer define: **credential scope** (least-privilege slice), **data minimization** (which portion of DL, not all), **retention/training constraints**, and **breach containment**. Tools that query under their own service credentials must faithfully proxy the end-user's identity so DL enforcement is not bypassed — enforced, not assumed: require a verifiable end-user assertion (signed user token / OBO) and reject requests carrying only a service credential with no user identity.
 
 ## 7. Access Control
 
@@ -150,7 +150,7 @@ Preferred model: **Google SSO + Google Groups.**
 
 **Access-control freshness contract.** Propagated metadata is a cache; a stale cache leaks access after revocation. **Permission refresh is decoupled from content-staleness refresh** (opposite risk profiles). For sensitive categories, DL either re-validates against the live DS/Group at query time, or enforces a **maximum propagation lag** with a **fail-closed default**.
 
-**Computed/aggregated artifacts (mosaic effect).** A cross-DS aggregation has no single source ACL and may exceed any input's sensitivity. It inherits the **intersection of all contributing sources' groups (most-restrictive)** and is **restricted by default** until cleared. This is **harder in a plain DS** (a Doc/Sheet offers only its own sharing, no query-time intersection). Therefore: aggregations whose mosaic sensitivity exceeds what the target store can enforce should **not** be materialized there — instead DL stores **pointers/instructions** directing permitted users to recompute under their own SSO identity at query time.
+**Computed/aggregated artifacts.** A cross-DS aggregation has no single source ACL. Rather than computing a most-restrictive intersection at runtime, each materialized output is assigned **one sensitivity tier / audience group** named by the skill author (**default-deny** until cleared). A genuinely cross-tier output is served either by an **admin-provisioned audience group** whose membership *is* the intended union, or — absent a standing audience — by storing **pointers/instructions** directing permitted users to recompute under their own SSO identity at query time (a plain DS offers only its own sharing, no query-time intersection). The skill never computes an intersection. Before writing, the skill asserts the named group is no broader than every input source's audience; on failure the output stays default-deny.
 
 **Governed-writer controls (non-versioned stores).** The writer identity is a single point of failure (a compromised credential poisons ACLs/hints/trust for all queries). Require: no long-lived keys (e.g., Workload Identity Federation for GCP/BigQuery), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on all writes.
 
@@ -163,7 +163,7 @@ Preferred model: **Google SSO + Google Groups.**
 - **Human-verified summaries** → a DS (DL may index/point to them).
 - **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it. Must be provenance-marked AI-generated, registered in the catalog, and written under a clear identity (user SSO for attended runs, non-human Google account for unattended), governed by native sharing + version history. It is unverified until a human reviews it, becoming human-verified DS content under that human's identity.
 - **Confirmations** → durable DL-origin data; attributed; **start in a Google Sheet**, promote to an integrity-enforcing store when write-time enforcement is needed (§4.4).
-- **The catalog** → the one DL artifact any user with edit access may write directly when in a version-history DS.
+- **The catalog** → DL topology, written by the skill service account + named catalog owners (not any editor) when in a version-history DS; reads stay open.
 - **DL writes** → only computed data, the catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
 
 > **Use case — secured project information (courtesy of Ryn Bennett).** Portfolio managers restrict PMR meeting notes, the only place comprehensive per-program risk metrics are discussed; MA PFML now requires Program Manager approval to share sprint metrics. These walls inhibit data democracy. Independently-vetted [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) was created as a workaround.
@@ -200,4 +200,4 @@ Goal: prove DL improves retrieval quality, speed, and trust without creating a s
 - **Staleness / change detection** underspecified: per-DS CDC/webhooks/delta tokens vs. full re-reads, DSs lacking delta primitives (Slack, Gmail), target refresh interval (also sets the permission-leak window), and 403-vs-404-vs-5xx error semantics so transient outages don't purge valid DL. Catalog pointers need the same.
 - **Catalog scale ceiling** — format is decided (Google Sheet first, schema in §2, promote to Postgres/indexed DB for scale). Still open: the concrete subject-count / pointer-volume threshold that triggers promotion, and the migration runbook (Sheet → DB) including how in-flight skill writes are handled during cutover.
 - **Provenance-marking convention** — concrete per-DS marker (label/property/naming) readable by humans and skills, plus the human-review → human-verified promotion rule.
-- **User-writable catalog: detection & recovery** — detection cadence/trigger (skill validation pass vs. edit alerting), who may revert, how the skill reconciles non-re-derivable human rows, and the acceptable bound on the bad-pointer misdirection window.
+- **Catalog write integrity: detection & recovery** — with writes restricted to the skill account + named catalog owners, still open: detection cadence/trigger (skill validation pass vs. edit alerting), how the skill reconciles non-re-derivable human-owned rows, and the acceptable bound on the bad-pointer misdirection window.
