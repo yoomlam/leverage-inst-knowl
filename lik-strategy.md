@@ -4,18 +4,17 @@
 
 **Key terms.**
 - **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed: Google Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, etc. They remain the **source of truth**; all durable writes happen here.
-- **Discovery Layer (DL)** — a lightweight, *computed* layer **derived from the DSs** (indexes, aggregations, freshness/trust signals, pointers) that makes discovery and retrieval faster. It is never a second source of truth, and most of it is recomputable from the DSs at any time.
-- **Catalog** — DL's "yellow pages": a single well-known lookup mapping `type + subject → location`, so a consumer can find *where* any DL output lives without searching every store.
 - **MCP** (Model Context Protocol) — the service interface through which agents and apps read and write DSs (and later DL) under a verified user identity.
+- **Discovery Layer (DL)** — a lightweight, *computed* layer **derived from the DSs** (indexes, aggregations, freshness/confirmation signals, pointers) that makes discovery and retrieval faster. It is never a second source of truth, and most of it is recomputable from the DSs at any time. Its data is **distributed across many stores** — a summary in a Doc, signals in a Sheet, tables in a warehouse — wherever each output best belongs.
+- **Catalog** — DL's "yellow pages": a single, **published, well-known location** (one address clients know in advance) mapping `type + subject → location`. Because DL is scattered, the catalog is **typically a client's first stop** — one lookup to find *where* any DL output lives, then follow the pointer, instead of searching every store.
 
 Other acronyms used below:
 - **ACL** (access control list) — the per-record permissions a system stores: who may read or write what.
 - **SSO** (single sign-on) — one verified login across systems; here, **Google SSO** + **Google Groups** for role/permission grouping.
 - **OIDC / OAuth** — the standard identity/authorization protocols that produce the verified token carrying the user's identity.
 - **BI** (business intelligence) — operational dashboards and reporting (the Parallel Track).
-- **SaaS** (software as a service) — a vendor-hosted commercial tool, as opposed to a self-hosted one.
 
-**The strategy.** This is an implementation **strategy** for [lik-architecture-concise.md](lik-architecture-concise.md). It starts by *buying* (Layer 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level is independently useful, adds one capability, and is justified by a limitation in the level before it.
+**The strategy.** This is an implementation strategy for Leveraging Institutional Knowledge (LIK). It starts by *buying* (Layer 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level is independently useful, adds one capability, and is justified by a limitation in the level before it.
 
 The strategy is deliberately falsifiable: ship a layer, learn from it, and only spend on the next if the prior one proved the need. Every layer ends with a **limitation** — the reason the next one exists.
 
@@ -25,10 +24,10 @@ The strategy is deliberately falsifiable: ship a layer, learn from it, and only 
 
 **Goal:** get immediate value and a measurable baseline by adopting an existing tool *before* building anything — and use the experience to decide what, if anything, is worth building.
 
-Commercial enterprise-search / AI-retrieval products already ingest these DSs, enforce permissions, and provide AI retrieval out of the box. Buy one and run it for a few months:
+Commercial enterprise-search / AI-retrieval products already connect to these DSs, enforce permissions, and provide AI retrieval out of the box. Buy one and run it for a few months:
 
 - **Commercial apps** — Glean, GoSearch, SearchUnify.
-- *Lower-cost variant:* self-hosted open-source platforms — Onyx CE, PipesHub, SWIRL — adopt (don't build) if data residency or budget rules out SaaS.
+- *Lower-cost variant:* self-hosted open-source platforms — Onyx CE, PipesHub, SWIRL — adopt (don't build) if data residency or budget rules out commercial apps.
 
 **What we get beyond the tool itself:**
 - A **working capability today**, with no build cost.
@@ -37,12 +36,15 @@ Commercial enterprise-search / AI-retrieval products already ingest these DSs, e
 
 **How to run it:** pick a pilot user group, connect a few high-value DSs, and have users log real questions and rate the answers. Track precisely *where* it fails — which data sources it can't reach, which questions come back wrong/stale/incomplete, which permissions it can't honor.
 
-> **Limitation.** A turnkey tool is a black box — possible limitations include: you can't change its ranking, and you can't add cross-source aggregations or trust signals it doesn't natively support. Its **data-handling model** also matters and varies per tool — confirm it during evaluation, and apply the third-party trust-boundary controls in 1.3 wherever a copy exists:
->   - *Index-based* (e.g., Glean, GoSearch) ingests/crawls sources into its own search index — a derived copy with source ACLs mirrored in, and a bulk re-export surface.
->   - *Federated / connector* (e.g., SearchUnify) queries sources at read time and doesn't persist a full copy.
->   - Many are *hybrid*.
->
-> The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Layer 0.
+### Expected limitations of this layer
+
+A turnkey tool is a black box — possible limitations include: you can't change its ranking, and you can't add cross-source aggregations or confirmation signals it doesn't natively support. Its **data-handling model** also matters and varies per tool — confirm it during evaluation, and wherever a data copy exists test third-party data-custody controls:
+
+- *Index-based* (e.g., Glean, GoSearch) ingests/crawls sources into its own search index — a derived copy with source ACLs mirrored in, and a bulk re-export surface.
+- *Federated / connector* (e.g., SearchUnify) queries sources at read time and doesn't persist a full copy.
+- Many are *hybrid*.
+
+The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Layer 0.
 
 ---
 
@@ -57,7 +59,7 @@ The **Data Sources (DSs)** — Google Drive, Confluence, Jira, GitHub, Slack, Gm
 A local Claude Cowork-style agent connects to a few approved DSs via MCP and reads on the user's behalf.
 
 - **Access control via Google SSO.** Each MCP service / AI connector requires a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes the call. Identity is carried across every `agent → MCP → DS` hop (token passthrough / on-behalf-of), so the agent can only ever see what the signed-in person can see. An email is an identifier, never a self-asserted authenticator.
-- **The DS enforces its own native permissions.** The connector authenticates to each DS as the signed-in user, and that DS applies its native ACLs directly — no separate enforcement layer to keep in sync, and no need to normalize permissions into Google Groups at this level. (Normalizing native ACLs into Groups via an **admin mapping process** only becomes necessary once DL *materializes* a copy of the data and has to enforce on it itself — see §2.2 and the Parallel Track.)
+- **The DS enforces its own native permissions.** The connector authenticates to each DS as the signed-in user, and that DS applies its native ACLs directly — no separate enforcement layer to keep in sync, and no need to provision Google Groups for DL at this level. (Maintaining a Google Group that represents a shared output's audience — for sources not already group-based — only becomes necessary once DL produces shared outputs; see Level 2's access-control model.)
 
 ### 1.2 Read-write to DSs
 
@@ -69,53 +71,131 @@ The agent writes back under the **user's own SSO identity**, through each DS's n
 
 Because access is enforced per-DS on every read and write, **new data inherits the right protections automatically** — a doc written into a restricted Drive folder is restricted; a ticket created in a private project stays private. No separate permission system to keep in sync.
 
-### 1.3 Broaden the consumers
+### 1.3 Organization skills — encode *how* to answer
+
+Even with read/write MCP access, a raw agent doesn't know the organization's retrieval conventions: which DS is authoritative for which question, what internal jargon to search for, which space holds the real answer. Capture that know-how once as a **skill** — a reusable set of instructions that guides the agent's behavior for certain question types — and share it as an **"organization skill" available to any employee**, so everyone's agent benefits from the same institutional know-how without each person rediscovering it.
+
+A skill can direct the agent to, for example:
+
+- **Query a particular DS first** for a given question type — e.g., policy questions → the Confluence policy space before anything else; HR/benefits → Workday; incident history → the Jira incident project and the `#incidents` Slack channel.
+- **Search with specific terms** — expand internal acronyms and codenames (`PTO` → "paid time off"; project "Atlas" → its real ticket prefix), apply known synonyms, and prefer the org's canonical phrasing.
+- **Scope the search** — restrict to certain folders, spaces, labels, or projects, and exclude known-noisy or deprecated locations.
+- **Prefer authoritative sources** — name the documents/owners that are the source of truth for a topic, and rank them above ad-hoc mentions.
+- **Follow a fallback chain** — if the primary DS yields nothing, try the next-best source in a defined order rather than fanning out blindly.
+- **Shape the answer** — always cite source links, surface each source's last-updated date, and flag when the best match looks stale.
+- **Route by entity** — map a team/client/project name to the systems and people that own it.
+
+This is the cheapest, human-authored analog of what the Discovery Layer later automates: it encodes "where to look and how to ask" as shareable instructions instead of computed pointers. A skill is **maintained by a named owner**, **versioned**, and improved as the gap backlog from Layer 0 reveals where agents go wrong.
+
+Crucially, a skill is **guidance, not enforcement** — which is exactly why it's safe to share with everyone: it can only help an agent *find* answers faster, never widen access. Every query still runs under the user's own SSO identity (§1.1), so the DS's permissions — not the skill — decide what comes back. This means organization skills need no approval regime or governed-writer controls; a bad or stale skill can misdirect (send someone to the wrong place), but it can never leak data the user wasn't already entitled to. The corollary: never rely on a skill to *restrict* access — gating is always the DS's job.
+
+### Broadening the data consumers
 
 The MCP-to-DS path is not specific to one agent. The same services can back other clients — including the **commercial or self-hosted tools from Layer 0**, repointed at our MCP services so they proxy the end-user's identity instead of relying solely on their own connectors (and, for index-based tools, their own copy of the data).
 
 **Third-party trust boundary (inline hardening):** external tools are a distinct trust zone. For each one, define **credential scope** (least-privilege slice), **data minimization** (which DSs, not all), **retention/training constraints**, and **breach containment**. A tool querying under its own service credentials must faithfully proxy the end-user's identity so per-DS enforcement isn't bypassed.
 
-> **Limitation.** To find anything, every tool must **query each DS and fan out across all of them** on every request — slow, token-expensive, inconsistent across tools, and prone to dead ends. There is no shared, reusable view of what exists or where it is.
+### Expected limitations of this level
+
+Where no skill covers a question, a tool must **query each DS and fan out across all of them** on every request — slow, token-expensive, inconsistent across tools, and prone to dead ends.
+
+Organization skills (§1.3) cut that blind fan-out for the questions they cover, but they don't remove the underlying problem — they only point the agent at the right place. The **residual limitations** that survive even a good skill are what motivate Level 2:
+
+- **No reuse of computed results.** A skill says *where* to look, but the agent still performs the full retrieval and synthesis **live on every query** — the same work repeated, never cached as a reusable output.
+- **Hand-authored guidance doesn't scale or compute.** A skill can route by question type, but it can't carry per-subject pointers for thousands of projects/clients, and it can't **precompute** aggregations, freshness, or trust signals — it can only direct, not derive.
+- **Skills drift.** They are manually maintained, so they go stale as DSs change; there is still no shared, *computed* view of what exists or where it is.
 
 ---
 
 ## Level 2 — Discovery Layer computed outputs (no catalog yet)
 
-**Goal:** stop re-searching the DSs from scratch by precomputing reusable **Discovery Layer (DL)** outputs derived from them.
+**Goal:** stop re-searching the DSs from scratch by precomputing reusable **Discovery Layer (DL)** outputs derived from them. In effect, DL **automates and scales what the §1.3 organization skill did by hand** — turning hand-authored "where to look" guidance into *computed* pointers plus *precomputed* outputs that any tool can reuse.
+
+**The identity shift from Level 1.** Level 1 ran under the **user's** SSO — the agent saw only that user's slice, and the DS enforced per-user automatically. DL is different: its outputs are produced by a **DL skill** running on a schedule or on demand under its **own non-user service identity**, never the triggering user's SSO. It reads **exactly what that service identity is granted access to** — data shared directly with the account, or DSs where the account belongs to the appropriate Google Group — scoped **least-privilege per DS**. Because that one identity can be admitted across many sources, it reads inputs no single user could see and computes one shared output for everyone. That elevated identity is the source of both DL's power and its hardening burden: the skill assigns each output a sharing group (see access control, below), and because that assignment is **default-deny**, a miss **over-restricts** rather than silently leaking.
+
+**Two kinds of skill.** The §1.3 **organization skill** is shareable *guidance* that steers any user's agent at query time. The **DL skill** below is an automated *job* that reads DSs and writes DL outputs on a schedule. Different role — guidance vs. producer.
 
 DL is a *computed* layer, never a hand-maintained knowledge base, and never a second source of truth. It is **AI-generated by default** (a user may hand-author an artifact, in which case it's tagged `human-created`). Most DL is **recomputable** from the DSs at any time.
 
-DL content carries lightweight **tags**, realized with whatever the store already supports (a column, a label, a page property) — provenance/verification, freshness/trust, classification, and propagated ACL metadata. No bespoke tagging system.
+DL content carries lightweight **tags**, realized with whatever the store already supports (a column, a label, a page property) — provenance/verification, freshness/trust, classification, and the assigned **sharing group** (or `unrestricted`). No bespoke tagging system.
 
-DL outputs are produced by a **scheduled or manual AI skill** that reads DS content (respecting ACLs), computes the output, and writes it to a chosen store via MCP. The skill is the **most privileged reader**, scoped **least-privilege per DS**, and it **captures each item's source ACL at read time** (a miss silently widens access).
+Each output is written to a **backing store** named in the DL skill's instructions. A store is wherever the output best lives: often a DS people already use (a Google Doc, a Confluence page, a Sheet), but it can also be a dedicated DL store that is *not* a source-of-truth DS (Postgres, a BigQuery warehouse). That store choice is fixed in the instructions, decided along two axes — *who consumes the output* (people → a human-readable artifact; tools → machine signals) and *how much write integrity it needs* (version history is enough vs. write-time enforcement). Access control, though, is **uniform** across every store, so it's described once below.
 
-The store is chosen **per output type**, along two axes — *who consumes it* and *how much integrity it needs*:
+### Access control — share with a group, fail-closed
+
+Every output the DL skill writes carries one of three sharing states:
+
+1. **Shared with a specified Google Group** — the group that should see it.
+2. **Explicitly unrestricted** — an affirmative flag the skill sets to open the output org-wide (the "cleared" case).
+3. **Unspecified → default-deny** — shared only with a restricted fallback group, never open. Absence of a decision is never "open."
+
+Enforcement is the **store's own native group/role grant** — there is no separate enforcement layer to keep in sync:
+
+| Store | How a specified group is honored |
+|---|---|
+| **Google Drive / Docs / Sheets** | Native sharing to the Google Group — direct. |
+| **Confluence** | Page/space restriction to a Confluence group **synced** from the Google Group (Atlassian Access / SCIM). |
+| **BigQuery** | IAM grants the Google Group a role on the dataset/table; authorized views and row-access policies for finer control — direct. |
+| **Postgres** | The one outlier: needs a `Google Group → Postgres role` bridge, or a fronting service that resolves the caller's groups into a row-level-security predicate. |
+
+Because each output is *either* one specified group *or* explicitly unrestricted, the skill **never computes a most-restrictive intersection** — the mosaic problem disappears. Two disciplines keep it correct:
+
+- **One sensitivity tier per output.** Scope each skill so that **one group unambiguously matches the output's intended audience** (e.g., *project-X summary → project-X members*). A skill that blends sensitivity tiers into one artifact is a smell — split it.
+- **The named group must exist.** The skill's author specifies the audience group in the instructions — the DL skill doesn't choose at runtime. Where the source DS already uses Google Groups, the group is on hand. Where it doesn't (Slack, Jira, Salesforce, Workday), an admin must **provision and maintain a Google Group** whose membership mirrors that audience for the author to reference; until one exists, the output stays default-deny.
+
+A bonus of sharing with a **live** group: membership changes (a revoked user) propagate **automatically** — there is no per-user permission cache to go stale. The skill's only freshness duty is re-running when an output's *correct group* changes (a reclassification), which its normal recompute already handles.
 
 ### 2.1 Human-readable artifacts
 
-Summaries, digests, curated indexes → written into any DS where people already work (a Google Doc, a Confluence page). Must be **provenance-marked `AI-generated`**, and written under a clear identity (the user's SSO for attended runs, a non-human Google account for unattended). Unverified until a person reviews it, at which point it becomes **`human-verified`** DS content under that reviewer's identity.
-
-*Hardening (inline):* these live in version-history DSs, so attribution and audit come from the DS's own version history — revert is the recovery path. No special write regime.
+Summaries, digests, curated indexes → written into any DS where people already work (a Google Doc, a Confluence page), shared per the model above. Must be **provenance-marked `AI-generated`**. Both the read and the write are the DL skill's **service identity**, so the artifact is attributed to the skill, never a person. Unverified until a person reviews it, at which point it becomes **`human-verified`** DS content under that reviewer's identity. These live in version-history DSs, so attribution and audit come from version history — revert is the recovery path.
 
 ### 2.2 Machine retrieval signals
 
-Indexes, prioritized pointers, retrieval hints, freshness/obsolescence signals, and **propagated ACL metadata** → a store chosen for scale (a Google Sheet at small scale; Postgres or BigQuery later). This is a storage-engine choice, not an architectural one.
+Indexes, prioritized pointers, retrieval hints, freshness/obsolescence signals are saved to a store chosen for scale (a Google Sheet at small scale; BigQuery or Postgres later). This is a storage-engine choice, not an architectural one; access control is the same group-share model above.
 
-*Hardening (inline):*
-- **Now DL holds a copy, so it must enforce on it.** Unlike Level 1 (where each DS enforced itself), a materialized store needs propagated ACL metadata. For DSs that can't express Google Groups (Slack channels, Atlassian roles, Salesforce profiles, Workday models), an **admin mapping process** with a named owner normalizes native ACLs to Groups — **default-deny** for unmatched records, **most-restrictive-wins** on conflict. Here the mapping is the **primary** mechanism.
-- **ACL metadata is a *hint*, not a gate.** It's used for routing/pre-filtering only; real enforcement stays at the target store (the DS's native permissions, or query-time predicates where DL serves from its own store). A tampered hint can't widen access.
-- **Access-control freshness.** Propagated ACL is a cache, and a stale cache leaks access after a revocation. Refresh permissions on a schedule **decoupled** from content-staleness refresh; for sensitive categories, re-validate against the live DS/Group at query time or enforce a **maximum propagation lag with a fail-closed default**.
-- **Mosaic effect.** A cross-DS aggregation has no single source ACL and can be more sensitive than any input. It inherits the **most-restrictive intersection** of its sources' groups and is **restricted by default**. If its sensitivity exceeds what the target store can enforce, **don't materialize it** — store a pointer/instruction telling permitted users to recompute it under their own identity at query time.
-- **Promotion.** When a signal store outgrows a Sheet, promote to a non-versioned store (Postgres/warehouse) under **governed-writer controls**: no long-lived keys (e.g., Workload Identity Federation), a rotation schedule, least privilege, and audit logging on all writes.
+*Hardening (inline):* when a signal store outgrows a Sheet and moves to a **non-versioned** store (Postgres/warehouse), its writer runs under **governed-writer controls** — no long-lived keys (e.g., Workload Identity Federation), a rotation schedule, least privilege, and audit logging on all writes. Postgres additionally needs the `group → role` bridge from the table above.
 
-### 2.3 Confirmation / trust signals
+### 2.3 Confirmation signals
 
-Users confirm that an output is useful or accurate. These confirmations **originate in DL** from user feedback and exist in **no DS** — they are **durable DL-origin data**, the one part of DL that is *not* recomputable. **Revert is their only recovery.**
+Users can confirm that a **DL output** or a **DS data** an AI built its response from is trustworthy -- confirming the underlying source of truth feeds the ranking signals of §2.2. These confirmations **originate in DL** from user feedback and exist in **no DS** — they are **durable DL-origin data**, the one part of DL that is *not* recomputable. **Revert is their only recovery.**
 
-- **Start in a Google Sheet:** native sharing gates writers, every write is attributed to an SSO identity, version history is the audit log.
-- **Promote** to a store fronted by a service enforcing verified identity, rate-limiting, and write-time provenance (e.g., Postgres + app) when scale, untrusted writers, or high-stakes ranking demand write-time enforcement. Being non-recomputable, they need their own backup/retention.
+**Linking a signal to its data.** A confirmation can only attach to specific data if the response is traceable to it — which the §1.3 "always cite source links" convention already guarantees; the citation is the join key. Each signal also records the **version of the confirmed data** as its own column (e.g., doc revision, ticket `updated_at`), so a later edit doesn't silently inherit trust the prior version earned.
 
-> **Limitation.** DL now deliberately **spreads outputs across many stores** — a Doc here, a Sheet there. To use them, every tool must hard-code that storage topology, or fan out and search every store — reintroducing the Level 1 problem one layer up. There is **no single known place to start**.
+**How a user confirms** — from explicit to implicit:
+- **An affordance in the AI tool** — thumbs-up / "accurate," scoped per cited source rather than the whole answer (one response may cite several sources; only one was the good one).
+- **Conversationally, to the agent** — in Claude Cowork there may be no button; the user just says "yes, that's right," and the agent records it by calling an **MCP confirm tool** (agent-native parity with the button).
+- **A correction is a negative signal** — when a user fixes the underlying record (§1.2), capture that too; trust is two-sided.
+
+Like all DL writes, a **service account writes the confirmation to the store** — users never get direct write access to the confirmation store. The **confirming user's verified identity is captured as an attributed field** (e.g., `confirmed_by`), and routing every write through the service lets it enforce validation, **rate-limiting / de-duplication** (so no one inflates a record's trust by confirming it repeatedly), and provenance at write time. Read access follows the group-share model above.
+
+- **Start in a Google Sheet:** the service account writes to it; version history is the audit log, and revert recovers a bad write.
+- **Promote** to a service-fronted store (e.g., Postgres + app) when scale, untrusted writers, or high-stakes ranking demand stronger write-time enforcement. Being non-recomputable, they need their own backup/retention.
+
+### 2.4 Using confirmation signals at query time
+
+The §2.3 table is just another §2.2 machine-retrieval signal: an **organization skill** (§1.3) triggered by a user's question can read it — joining on the DS-record or DL-output pointer the answer cites — and let accumulated trust shape the response. The skill runs under the **user's** SSO, so it only ever sees confirmations the group-share model already permits. How aggressively a skill leans on trust is the **skill author's choice**; the options below run from lightest-touch to most invasive.
+
+**A. Presentation only — change how the answer reads, never what's retrieved.**
+- **Confidence annotation** — surface "confirmed accurate by N people" (or by a named expert, from `confirmed_by`) inline, leaving the human to judge. Never hides data; the safest use.
+- **Negative-signal warning** — if a record was previously corrected, flag "reported inaccurate on <date>" rather than silently dropping it.
+
+**B. Version-aware trust — exploit the confirmed-version column.**
+- **Staleness gating** — compare the confirmed version to the record's current version; if it changed since, downgrade or flag the trust ("confirmed, but edited since"). Stops trust carrying silently across edits — the reason the version column exists.
+- **Recency decay** — weight recent confirmations above old ones, alone or with staleness gating.
+
+**C. Ranking — change which data the answer is built from.**
+- **Tie-breaker** — consult trust only when candidates are similarly relevant or directly conflict, and prefer the more-confirmed one. The least distorting ranking use.
+- **Rank boost** — boost higher-confirmed records up the result list globally; relevance still retrieves, trust reorders.
+- **Threshold / filter** — surface only records above a confirmation floor, or drop ones carrying strong negative signals. Aggressive — risks hiding correct-but-unconfirmed data, so prefer a soft demotion to a hard filter.
+
+**D. Audience weighting — exploit `confirmed_by`.**
+- **Peer / expert weighting** — count confirmations from the asker's group/role, or a topic's known owners (§1.3), above a stranger's. Adds query-time cost to resolve groups.
+
+**Choosing a strategy.** Start with **presentation-only (A) + staleness gating (B)** — read-only, transparent, never hide data, and directly exploit the `confirmed_by` and version columns we capture. Add the **tie-breaker (C)** as the first ranking use once confirmation volume is trustworthy. Defer hard filters and audience weighting (C-threshold, D) until the Layer 0 gap backlog shows a question type that needs them — they add distortion and query-time cost for marginal gain. Whatever the choice, **trust signals advise, never gate**: a record the user is entitled to is never hidden by low trust, only ranked or annotated — gating stays the DS's job (§1.3).
+
+### Expected limitations of this level
+
+DL now deliberately **spreads outputs across many stores** — a Doc here, a Sheet there. To use them, every tool must hard-code that storage topology, or fan out and search every store — reintroducing the Level 1 problem one layer up. There is **no single known place to start**.
 
 ---
 
@@ -129,13 +209,15 @@ It is the one artifact nothing points *to*, so it lives at a **well-known addres
 
 **Implemented as a single Google Sheet — chosen for transparency.** A Sheet gives native sharing, SSO-attributed edits, and version history *for free*, and anyone can open it and see exactly what the catalog claims. It is treated as **just another DS artifact**: any user with native edit access may write it, edits are attributed via SSO and logged by version history, and a bad edit is reverted. Suits low-cardinality pointers (dozens to low-hundreds of subjects). The schema is in [lik-architecture-concise.md §2](lik-architecture-concise.md).
 
-**How it's created and kept honest.** A **skill writing under an ordinary non-human Google account** (e.g., `summarizer@navapbc.com`) registers each computed output's location as it runs, appearing in version history like any editor. Because version history is *corrective, not preventive*, each run also **validates entries / dangling pointers and re-derives the rows it owns** (`row_provenance = 'skill'`), bounding any misdirection window; hand-authored rows it can't re-derive rely on revert.
+**How it's created and kept honest.** The **DL skill**, writing under an ordinary non-human Google account (e.g., `summarizer@navapbc.com`), registers each computed output's location as it runs, appearing in version history like any editor. Because version history is *corrective, not preventive*, each run also **validates entries / dangling pointers and re-derives the rows it owns** (`row_provenance = 'skill'`), bounding any misdirection window; hand-authored rows it can't re-derive rely on revert.
 
 *Hardening (inline):*
-- **Enforcement never trusts the catalog's stored ACL hint** — real access is enforced at the target store, so a tampered catalog row can't widen access. This is why the Sheet can stay openly editable.
+- **The catalog stores pointers, not permissions.** Real access is enforced at each target store's group grant (§2 access control), so a tampered or wrong catalog row can *misdirect* a lookup but can never *widen* access. This is why the Sheet can stay openly editable.
 - **Promotion.** When subject count or pointer volume outgrows a Sheet, promote the *same logical schema* to **Postgres or any indexed DB** — consumers still do one `(entry_type, subject)` lookup. A catalog in a non-versioned store takes on the **governed-writer discipline** and adds its own audit columns (`created_at` / `updated_at` / `updated_by`), which the Sheet realization doesn't need.
 
-> **Result.** Tools have one known starting point instead of fanning out per query. This is the core of "data democracy": authorized users reach knowledge without knowing where any artifact physically lives.
+**Result.** Tools have one known starting point instead of fanning out per query. This is the core of "data democracy": authorized users reach knowledge without knowing where any artifact physically lives.
+
+**The organization skill now evolves.** What §1.3 did by hand — a maintained routing table of "for this question, look here" — the catalog now provides as computed, scalable data. So the skill stops hard-coding DS routing and instead simply directs the agent to **consult the catalog first**, then follow the pointer. The two become complementary: the skill routes the agent *to* the catalog and still shapes *how* it answers (citations, freshness, fallback), while the catalog authoritatively answers *where* each output lives.
 
 ---
 
@@ -151,13 +233,13 @@ It is a **deterministic path** — no AI in the loop:
 DSs → Deterministic Pipeline → Warehouse → BI Dashboards
 ```
 
-- **Deterministic pipelines** handle known, repeatable transforms — dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts — typically materialized in a **warehouse**. They propagate/assign ACL metadata and register their outputs in the catalog (Level 3), exactly like the AI skill does.
+- **Deterministic pipelines** handle known, repeatable transforms — dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts — typically materialized in a **warehouse**. They assign each output a sharing group (the same fail-closed model as §2) and register their outputs in the catalog (Level 3), exactly like the DL skill does.
 - **The warehouse is exposed via MCP like any other DS.** An agent or app queries it through the same `verified-SSO-token` path; the catalog points to warehouse tables (`store_kind = warehouse`, `bq://dataset.table`) just as it points to a Doc or a Sheet. To consumers, the warehouse is simply one more discoverable store.
 - The warehouse is also **one option for DL's machine-retrieval backing store at scale** — the natural promotion target from §2.2 when signal volume is large. It is *one possibility*, not a requirement of the architecture.
 
-*Hardening (inline):* the warehouse is a non-versioned store, so its writers (pipelines and any DL-signal promotion landing here) run under the **governed-writer controls** — no long-lived keys, rotation, least privilege, audit logging. For each DS feeding a *materialized* warehouse store, document whether Group attachment is possible and, where not, how native ACLs normalize (the admin mapping is the **primary** mechanism there).
+*Hardening (inline):* the warehouse is a non-versioned store, so its writers (pipelines and any DL-signal promotion landing here) run under the **governed-writer controls** — no long-lived keys, rotation, least privilege, audit logging. A BigQuery warehouse honors a Google Group via IAM directly; an admin only has to provision a Group for an audience whose source DS isn't already group-based.
 
-> Because it's a parallel track, it can be deferred entirely, or pulled forward ahead of Level 3 if reporting is the more urgent need.
+Because it's a parallel track, it can be deferred entirely, or pulled forward ahead of Level 3 if reporting is the more urgent need.
 
 ---
 
@@ -172,14 +254,16 @@ Every element of [lik-architecture-concise.md](lik-architecture-concise.md) land
 | Third-party trust boundary | 0 / 1.3 |
 | DSs as source of truth, MCP exposure | 1 |
 | Google SSO + Groups, identity rules, native per-DS enforcement | 1.1 |
-| Admin mapping process (normalize native ACLs → Groups for materialized stores) | 2.2 / Parallel Track |
 | Write model (new / corrections / verified summaries) | 1.2 |
 | DL computed outputs, tags, recomputable-vs-durable | 2 |
-| AI skill (privileged reader, source-ACL capture, provenance marking) | 2 |
+| DL skill (privileged reader, group assignment, provenance marking) | 2 |
+| Access control: group-share, fail-closed default, store→group/role table (mosaic dissolved via one-tier-per-output) | 2 (Access control) |
+| Provision/maintain a Google Group for audiences whose source isn't group-based | 2 (Access control) / Parallel Track |
 | Human-readable artifacts | 2.1 |
-| Machine retrieval signals, ACL-hint enforcement, freshness contract, mosaic effect | 2.2 |
-| Confirmation / trust signals (durable DL-origin) | 2.3 |
-| The catalog, schema, non-human-account skill, validate/re-derive | 3 |
+| Machine retrieval signals | 2.2 |
+| Confirmation signals (durable DL-origin) | 2.3 |
+| Consuming confirmation signals at query time (annotation / staleness / ranking) | 2.4 |
+| The catalog, schema, DL skill (non-human account), validate/re-derive | 3 |
 | Sheet→Postgres promotion, governed-writer controls | 2.2 / 3 / Parallel Track (inline) |
 | Deterministic pipeline, warehouse, BI dashboards | Parallel Track |
 
