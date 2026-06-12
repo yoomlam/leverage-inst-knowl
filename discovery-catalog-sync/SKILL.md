@@ -1,11 +1,12 @@
 ---
 name: discovery-catalog-sync
-description: Sync the Discovery Layer Catalog Google Sheet by fetching all Confluence pages tagged with `project-index` and upserting a row for each one. Use whenever someone says "sync the catalog", "update the discovery catalog", "refresh the catalog from Confluence", or asks to add/update catalog entries from the Project Index Directory. The catalog spreadsheet ID is 1awd09QT94UiHj7ubUgV3lz_qscxe2NmF06irlcqWVG0.
+description: Sync the Discovery Layer Catalog Confluence page by fetching all Confluence pages tagged with `project-index` and upserting a row for each one. Use whenever someone says "sync the catalog", "update the discovery catalog", "refresh the catalog from Confluence", or asks to add/update catalog entries from the Project Index Directory. The catalog is at Confluence page ID 3224961120 in personal space ~911381386.
 ---
 
 # Discovery Layer Catalog Sync
 
-Syncs the **Discovery Layer Catalog** Google Sheet with all Confluence pages tagged `project-index`. The Project Index Directory page surfaces these pages via a Page Properties Report macro using `label = "project-index"` as its CQL query.
+Syncs the **Discovery Layer Catalog** Confluence page with all pages tagged `project-index`. The catalog lives at:
+`https://navasage.atlassian.net/wiki/spaces/~911381386/pages/3224961120/Discovery+Layer+Catalog`
 
 ## What to do
 
@@ -16,67 +17,75 @@ Call `searchConfluenceUsingCql` with:
 - cql: `label = "project-index" AND type = page`
 - limit: 250
 
-For each page in the results, collect:
+For each result, collect:
 - `title` → **Name**
 - `webUrl` → **URL**
 - `space.name` → **Space**
-- `type` → **Type** (always "page")
-- `summary` → **Description** (trim to a readable length; omit label noise like "project-index" at the end)
+- `summary` → **Description** (trim to 200 chars)
 - `lastModified` → **Last Modified**
 - `author.displayName` → **Author**
 
-If you want richer metadata (Portfolio, Primary Archetype, etc.), fetch each page individually using `getConfluencePage` with `contentFormat: "html"` and look for a `details` macro table. Parse its rows as `key: value` pairs and add them as additional columns. Only do this if the user explicitly asks for it — it adds one API call per page and can be slow.
+### Step 2 — Read the current catalog page
 
-### Step 2 — Read the current catalog sheet
+Use the `confluence-editor` skill to safely read and update the catalog page. Follow its workflow:
 
-Call `read_file_content` (Google Drive MCP) with fileId `1awd09QT94UiHj7ubUgV3lz_qscxe2NmF06irlcqWVG0`.
+Call `getConfluencePage` with:
+- cloudId: `navasage.atlassian.net`
+- pageId: `3224961120`
+- contentFormat: `storage`
 
-Parse the result as CSV. The expected columns are:
-```
-Name, URL, Space, Type, Description, Last Modified, Author
-```
+Parse the response body to extract the existing table rows. Build an in-memory map keyed by **URL** (the `href` of each row's first link) so you can detect new vs. existing rows. Note the current version number — you'll need it for the update.
 
-Build an in-memory map keyed by **URL** so you can detect which rows are new vs. already present.
-
-### Step 3 — Upsert rows
+### Step 3 — Build the updated table
 
 For each page from Confluence:
-- If a row with the same URL already exists → update it with the freshest values from Confluence.
-- If no row exists with that URL → append a new row.
+- If a row with the same URL already exists → update it with fresh values.
+- If no row exists → append a new row.
 
-Preserve any rows in the current sheet that were *not* returned by the Confluence query (they may have been added manually).
+Preserve any rows not returned by the Confluence query (manually added entries).
 
-### Step 4 — Write the updated catalog
+The table has columns: **Name** (as a hyperlink), **Space**, **Description**, **Last Modified**, **Author**.
 
-The Google Drive MCP does not support in-place cell updates. To persist changes, create a new Google Sheet from the merged CSV:
-
-```
-create_file(
-  title: "Discovery Layer Catalog",
-  textContent: <merged CSV string>,
-  contentMimeType: "text/csv"
-)
+Build the full updated table as HTML:
+```html
+<table><tbody>
+<tr><th>Name</th><th>Space</th><th>Description</th><th>Last Modified</th><th>Author</th></tr>
+<!-- one <tr> per project -->
+</tbody></table>
 ```
 
-This creates a new spreadsheet. Tell the user:
-- The new sheet URL
-- How many rows were added vs. updated vs. unchanged
-- That the old sheet (`https://docs.google.com/spreadsheets/d/1awd09QT94UiHj7ubUgV3lz_qscxe2NmF06irlcqWVG0`) can be deleted manually if they no longer need it
+### Step 4 — Write the updated page
+
+Use the `confluence-editor` skill's `updateConfluencePage` workflow to push the changes in-place.
+
+Call `updateConfluencePage` with:
+- cloudId: `navasage.atlassian.net`
+- pageId: `3224961120`
+- contentFormat: `html`
+- body: the full page content — intro paragraph + updated table
+- version: current version number + 1
+- title: `Discovery Layer Catalog`
+
+The intro paragraph should always be:
+```html
+<p>Auto-synced from Confluence pages tagged <code>project-index</code>. Run the <strong>discovery-catalog-sync</strong> skill to refresh.</p>
+```
 
 ### Step 5 — Summary
 
-Respond with a tight summary:
+Respond with:
 ```
-Synced N pages from Confluence.
+Synced N pages from Confluence into the Discovery Layer Catalog.
   • X new rows added
   • Y rows updated
   • Z rows unchanged
 
-New catalog: <link>
+Catalog: https://navasage.atlassian.net/wiki/spaces/~911381386/pages/3224961120/Discovery+Layer+Catalog
 ```
 
 ## Notes
 
-- The `label = "project-index"` CQL is the canonical source of truth — it matches exactly what the Project Index Directory page renders via its Page Properties Report macro.
+- The `label = "project-index"` CQL is the canonical source of truth — it matches exactly what the Project Index Directory renders via its Page Properties Report macro.
+- Always use the `confluence-editor` skill's workflow for `updateConfluencePage` — never call it directly without fetching the current version first, as it replaces the entire page body.
 - If the search returns 0 results, verify the user has permission to view project index spaces and that the label is spelled correctly.
-- The columns in this catalog may evolve. If new columns are added manually in the sheet, preserve them when merging — only update the standard columns listed above.
+- Trim Description to 200 characters to keep the table readable.
