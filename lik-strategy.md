@@ -5,7 +5,7 @@
 **Key terms.**
 - **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed: Google Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, etc. They remain the **source of truth**; all durable writes happen here.
 - **MCP** (Model Context Protocol) — the service interface through which agents and apps read and write DSs (and later DL) under a verified user identity.
-- **Discovery Layer (DL)** — a lightweight, *computed* layer **derived from the DSs** (indexes, aggregations, freshness/confirmation signals, pointers) that makes discovery and retrieval faster. Its AI-generated outputs are never a second source of truth and are recomputable from the DSs at any time; the exceptions are durable, human-originated data — confirmation signals (§2.3) and human-verified/human-created artifacts — which live only in DL and recover by revert. Its data is **distributed across many stores** — a summary in a Confluence page, signals in a database, tables in a warehouse — wherever each output best belongs.
+- **Discovery Layer (DL)** — a lightweight, *computed* layer **derived from the DSs** (indexes, aggregations, freshness/confirmation signals, pointers) that makes discovery and retrieval faster. Its AI-generated outputs are never a second source of truth and are recomputable from the DSs at any time; the exceptions are durable, human-originated data — confirmation signals (§3.1) and human-verified/human-created artifacts — which live only in DL and recover by revert. Its data is **distributed across many stores** — a summary in a Confluence page, signals in a database, tables in a warehouse — wherever each output best belongs.
 - **Catalog** — DL's "yellow pages": a single, **published, well-known location** (one address clients know in advance) mapping `type + subject → location`. Because DL is scattered, the catalog is **typically a client's first stop** — one lookup to find *where* any DL output lives, then follow the pointer, instead of searching every store.
 
 Other acronyms used below:
@@ -14,7 +14,7 @@ Other acronyms used below:
 - **OIDC / OAuth** — the standard identity/authorization protocols that produce the verified token carrying the user's identity.
 - **BI** (business intelligence) — operational dashboards and reporting (the Parallel Track).
 
-**The strategy.** This is an implementation strategy for Leveraging Institutional Knowledge (LIK). It starts by *buying* (Level 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level adds one standalone capability and is justified by a limitation in the level before it. But standalone capability isn't standalone ROI: Levels 2–3 pay off only once Level 1 adoption shows the same questions recurring across many users — reuse is the value, so treat that recurrence as a precondition to check, not an assumption.
+**The strategy.** This is an implementation strategy for Leveraging Institutional Knowledge (LIK). It starts by *buying* (Level 0) to learn what's actually missing, then *builds* progressively (Levels 1–4) only where a bought tool falls short — with a parallel data-pipeline track. Each level adds one standalone capability and is justified by a limitation in the level before it. But standalone capability isn't standalone ROI: Levels 2–4 pay off only once Level 1 adoption shows the same questions recurring across many users — reuse is the value, so treat that recurrence as a precondition to check, not an assumption.
 
 The strategy is deliberately evidence-driven: ship a layer, learn from it, and only spend on the next if the prior one proved the need. Every layer ends with a **limitation** — the reason the next one exists.
 
@@ -44,7 +44,7 @@ A turnkey tool is a black box — possible limitations include: you can't change
 - *Federated / connector* (e.g., SearchUnify) queries sources at read time and doesn't persist a full copy.
 - Many are *hybrid*.
 
-The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Level 0.
+The gaps catalogued here become the **build backlog** for Levels 1–4 — and if none are worth the cost, the strategy correctly stops at Level 0.
 
 ---
 
@@ -145,7 +145,17 @@ Indexes, prioritized pointers, retrieval hints, freshness/obsolescence signals a
 
 *Hardening (inline):* a signal store is **non-versioned** (Postgres/warehouse), so its writer runs under **governed-writer controls** — no long-lived keys (e.g., Workload Identity Federation), a rotation schedule, least privilege, and audit logging on all writes. If signals land in Postgres rather than BigQuery, it additionally needs the `group → role` bridge noted under access control above.
 
-### 2.3 Confirmation signals
+### Expected limitations of this level
+
+DL's signals rank by what can be **derived** — freshness, provenance, co-occurrence, obsolescence. But nothing captures whether a person actually found an answer *correct*: trust is inferred from the data, never confirmed by a human. Two answers can look equally fresh and well-sourced while one is right and one is wrong, and computed signals can't tell them apart. That missing human judgment is what Level 3 adds.
+
+---
+
+## Level 3 — User confirmations
+
+**Goal:** capture the one trust signal Level 2 can't compute — a person saying *"this answer was right"* (or wrong) — and feed it back into retrieval. These confirmations are produced by people, not derived from the DSs, so they are the one part of DL that isn't recomputable.
+
+### 3.1 Confirmation signals
 
 Users can confirm that a **DL output** or a **DS data** an AI built its response from is trustworthy -- confirming the underlying source of truth feeds the ranking signals of §2.2. These confirmations **originate in DL** from user feedback and exist in **no DS** — they are **durable DL-origin data**, the one part of DL that is *not* recomputable. **Revert is their only recovery.** This makes confirmation signals one of the strategy's few **irreversible commitments** — with human-created artifacts (Key terms), the places the otherwise stop-anytime, recomputable design takes on durable custodial data that needs its own backup/retention.
 
@@ -156,14 +166,14 @@ Users can confirm that a **DL output** or a **DS data** an AI built its response
 - **Conversationally, to the agent** — in Claude Cowork there may be no button; the user just says "yes, that's right," and the agent records it by calling an **MCP confirm tool** (agent-native parity with the button).
 - **A correction is a negative signal** — when a user fixes the underlying record (§1.2), capture that too; trust is two-sided.
 
-Like all DL writes, a **service account writes the confirmation to the store** — users never get direct write access to the confirmation store. The **confirming user's verified identity is captured as an attributed field** (e.g., `confirmed_by`), and routing every write through the service lets it enforce validation, **rate-limiting / de-duplication** (so no one inflates a record's trust by confirming it repeatedly), and provenance at write time. Concretely: at most one confirmation per user per cited source-version, and a minimum count of distinct confirmers before trust affects ranking (§2.4). Read access follows the group-share model above.
+Like all DL writes, a **service account writes the confirmation to the store** — users never get direct write access to the confirmation store. The **confirming user's verified identity is captured as an attributed field** (e.g., `confirmed_by`), and routing every write through the service lets it enforce validation, **rate-limiting / de-duplication** (so no one inflates a record's trust by confirming it repeatedly), and provenance at write time. Concretely: at most one confirmation per user per cited source-version, and a minimum count of distinct confirmers before trust affects ranking (§3.2). Read access follows the §2 group-share model.
 
 - **Start as a Confluence-page table:** updatable in place (unlike a create-only Drive Sheet), so the service account appends and de-duplicates against the same page; page restrictions gate writers, SSO attributes each write, version history is the audit log, and revert recovers a bad write.
 - **Promote** to a service-fronted store (e.g., Postgres + an app) when scale, untrusted writers, or high-stakes ranking demand hard write-time enforcement of rate-limiting and de-duplication, under the §2.2 governed-writer controls. Being **durable and non-recomputable**, confirmation signals also need their own **backup/retention** — unlike the rest of DL, they can't be rebuilt from the DSs.
 
-### 2.4 Using confirmation signals at query time
+### 3.2 Using confirmation signals at query time
 
-The §2.3 table is just another §2.2 machine-retrieval signal: an **organization skill** (§1.3) triggered by a user's question can read it — joining on the DS-record or DL-output pointer the answer cites — and let accumulated trust shape the response. The skill runs under the **user's** SSO, so it only ever sees confirmations the group-share model already permits. How aggressively a skill leans on trust is the **skill author's choice**; the options below run from lightest-touch to most invasive.
+The §3.1 table is just another §2.2 machine-retrieval signal: an **organization skill** (§1.3) triggered by a user's question can read it — joining on the DS-record or DL-output pointer the answer cites — and let accumulated trust shape the response. The skill runs under the **user's** SSO, so it only ever sees confirmations the group-share model already permits. How aggressively a skill leans on trust is the **skill author's choice**; the options below run from lightest-touch to most invasive.
 
 - **A. Presentation only** (never changes what's retrieved) — annotate "confirmed accurate by N people" (or by a named expert, from `confirmed_by`), or flag "reported inaccurate on <date>" for a previously-corrected record. Safest; never hides data.
 - **B. Version-aware** (exploits the confirmed-version column) — **staleness gating** (if the record changed since it was confirmed, downgrade/flag — "confirmed, but edited since") and **recency decay** (weight recent confirmations higher).
@@ -174,11 +184,11 @@ The §2.3 table is just another §2.2 machine-retrieval signal: an **organizatio
 
 ### Expected limitations of this level
 
-DL now deliberately **spreads outputs across many stores** — a Confluence page here, a database table there. To use them, every tool must hard-code that storage topology, or fan out and search every store — reintroducing the Level 1 problem one layer up. There is **no single known place to start**.
+DL now deliberately **spreads outputs across many stores** — a Confluence page here, a signal table there, a confirmation table somewhere else. To use them, every tool must hard-code that storage topology, or fan out and search every store — reintroducing the Level 1 problem one layer up. There is **no single known place to start**.
 
 ---
 
-## Level 3 — The catalog (a Confluence page)
+## Level 4 — The catalog (a Confluence page)
 
 **Goal:** give every consumer **one lookup** to discover where any DL output lives, decoupled from storage decisions.
 
@@ -204,7 +214,7 @@ It is the one artifact nothing points *to*, so it lives at a **well-known addres
 
 **Goal:** serve operational reporting (BI dashboards) and scale DL's machine-retrieval signals, via the **same MCP interface** as everything else.
 
-**This is not a fourth step — it's an independent track.** It builds on the same foundations as Levels 1–3 (MCP exposure, SSO, and — once it registers outputs — the catalog), but isn't gated on completing the levels in sequence: start it whenever the BI use case matters, provided the foundations it uses are already in place. Equally, Levels 1–3 stand on their own without it.
+**This is not a fifth step — it's an independent track.** It builds on the same foundations as Levels 1–4 (MCP exposure, SSO, and — once it registers outputs — the catalog), but isn't gated on completing the levels in sequence: start it whenever the BI use case matters, provided the foundations it uses are already in place. Equally, Levels 1–4 stand on their own without it.
 
 It is a **deterministic path** — no AI in the loop:
 
@@ -212,13 +222,13 @@ It is a **deterministic path** — no AI in the loop:
 DSs → Deterministic Pipeline → Warehouse → BI Dashboards
 ```
 
-- **Deterministic pipelines** handle known, repeatable transforms — dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts — typically materialized in a **warehouse**. They assign each output a sharing group (the same fail-closed model as §2) and register their outputs in the catalog (Level 3), exactly like the DL skill does.
+- **Deterministic pipelines** handle known, repeatable transforms — dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts — typically materialized in a **warehouse**. They assign each output a sharing group (the same fail-closed model as §2) and register their outputs in the catalog (Level 4), exactly like the DL skill does.
 - **The warehouse is exposed via MCP like any other DS.** An agent or app queries it through the same `verified-SSO-token` path; the catalog points to warehouse tables (`store_kind = warehouse`, `bq://dataset.table`) just as it points to a Confluence page. To consumers, the warehouse is simply one more discoverable store.
 - The warehouse is also **one option for DL's machine-retrieval backing store at scale** — the natural promotion target from §2.2 when signal volume is large. It is *one possibility*, not a requirement of the architecture.
 
 *Hardening (inline):* the warehouse is a non-versioned store, so its writers (pipelines and any DL-signal promotion landing here) run under the **governed-writer controls** — no long-lived keys, rotation, least privilege, audit logging. A BigQuery warehouse honors a Google Group via IAM directly; an admin only has to provision a Group for an audience whose source DS isn't already group-based.
 
-Because it's a parallel track, it can be deferred entirely, or pulled forward ahead of Level 3 if reporting is the more urgent need.
+Because it's a parallel track, it can be deferred entirely, or pulled forward ahead of Level 4 if reporting is the more urgent need.
 
 ---
 
@@ -261,14 +271,14 @@ Every artifact the strategy creates, where it lives, who writes it, and how it's
   - *Durability:* **recomputable** from the DSs
   - *Access control:* group-share, fail-closed; store-native group/role grant
 
-- **Confirmation signals** *(Discovery Layer output)* (§2.3) — user trust and correction feedback
+- **Confirmation signals** *(Discovery Layer output)* (§3.1) — user trust and correction feedback
   - *Resides in:* a Confluence-page table (updatable in place, free version-history revert) → a service-fronted store (Postgres + app) at scale
   - *Written by:* a **service account** (the confirming user captured as `confirmed_by`); rate-limited / de-duped at write
-  - *Read/used by:* organization skills at query time, to shape ranking (§2.4)
+  - *Read/used by:* organization skills at query time, to shape ranking (§3.2)
   - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
   - *Access control:* group-share for reads; users never get direct write access
 
-- **Catalog** *(Discovery Layer output — the index over the others)* (Level 3) — the "yellow pages" mapping `type + subject → location`
+- **Catalog** *(Discovery Layer output — the index over the others)* (Level 4) — the "yellow pages" mapping `type + subject → location`
   - *Resides in:* a **Confluence page at a well-known address** (updated in place, stable address) → Postgres / indexed DB at scale
   - *Written by:* the DL skill's **service account** (e.g., `summarizer@navapbc.com`) + a small set of **named catalog owners**
   - *Read/used by:* **every consumer** — the first stop to find where any DL output lives
@@ -300,10 +310,10 @@ Every element of [lik-architecture-concise.md](lik-architecture-concise.md) land
 | Provision/maintain a Google Group for audiences whose source isn't group-based | 2 (Access control) / Parallel Track |
 | Human-readable artifacts | 2.1 |
 | Machine retrieval signals | 2.2 |
-| Confirmation signals (durable DL-origin) | 2.3 |
-| Consuming confirmation signals at query time (annotation / staleness / ranking) | 2.4 |
-| The catalog, schema, DL skill (non-human account), validate/re-derive | 3 |
-| Store promotion (page/table → DB), governed-writer controls | 2.2 / 3 / Parallel Track (inline) |
+| Confirmation signals (durable DL-origin) | 3.1 |
+| Consuming confirmation signals at query time (annotation / staleness / ranking) | 3.2 |
+| The catalog, schema, DL skill (non-human account), validate/re-derive | 4 |
+| Store promotion (page/table → DB), governed-writer controls | 2.2 / 4 / Parallel Track (inline) |
 | Deterministic pipeline, warehouse, BI dashboards | Parallel Track |
 
 ## Why this strategy
@@ -313,7 +323,8 @@ Each layer is an **evidence-driven bet**, and the order is chosen so each one's 
 - **Level 0** establishes whether a bought tool is already good enough, and — win or lose — yields the gap backlog that justifies any build at all. This operationalizes the build-vs-buy open question and the front-loaded build-vs-buy experiment from [lik-architecture-concise.md §11](lik-architecture-concise.md): buy first, A/B against the bought baseline, build only the gaps.
 - **Level 1** proves SSO-gated MCP access is enough for real work.
 - **Level 2** proves precomputed outputs beat fan-out search.
-- **Level 3** proves a single transparent catalog beats per-store lookups.
+- **Level 3** proves a human trust signal — user confirmations — improves answers in ways computed signals can't.
+- **Level 4** proves a single transparent catalog beats per-store lookups.
 - The **deterministic pipeline** runs as a parallel track, adding reporting whenever BI demands it.
 
 Ship one, learn, then spend on the next — rather than committing to the full system up front.
