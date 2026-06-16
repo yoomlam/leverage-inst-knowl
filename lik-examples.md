@@ -3,26 +3,22 @@ Following are examples of how LIK concepts map to current Nava solutions.
 - *DL-creation skill* takes *DS records* and creates *DL data*
 - *Query skill* queries *DL data* and *DS records* to answer user questions/requests
 
-### Analogies (intuition)
+### Analogy (intuition): an office building
 
-**A library.** This one is almost literal — a library's card catalog *is* a catalog.
+Picture a large office building.
 
-| LIK concept | Library | Why it fits |
+| LIK concept | Office building | Why it fits |
 | --- | --- | --- |
-| DS records | The books and archives on the shelves | Where the actual content lives and is updated — the source of truth. |
-| DL data | The librarian's summaries, study guides, and "new this week" displays | Derived from the books to save you reading them; can always be rebuilt from the shelves, never replaces them. |
-| Confirmation signals | Reader review slips — "this book answered my question" | Humans vouching that an answer was *actually* good; this lives on the slip, not inside the book. |
-| Catalog | A directory of the librarian's *guides* — which guide exists and where it's posted | Indexes the derived guides and their **locations**, not the books' contents; re-post a guide elsewhere and only this one directory line changes. (Note: *not* the card catalog — that indexes books, i.e. DS content.) |
-| DL-creation skill | The librarian who reads the books and writes the guides | Produces the derived material. |
-| Query skill | The reference librarian who knows which section to send you to | Steers your search; never decides what you're *allowed* to read (that's the library's own rules). |
+| DS records | The individual offices, where the real work and records are kept | The source of truth; each office controls who it lets in (its own permissions). |
+| DL data | Handouts and digests *about* what the offices do — posted at reception, on floor screens, in a kiosk | Derived so you don't have to visit every office; scattered across spots; can be regenerated from the offices anytime. |
+| Confirmation signals | Visitor feedback cards — "Suite 4B actually solved my problem" | People vouching an answer was good; kept on the card, not inside the office. |
+| Catalog | The lobby directory — topic → where its prepared material is posted | The one board everyone checks first; points to *where the handout lives*, not what's inside the offices. Move a handout and you change one directory line, not the offices. |
+| DL-creation skill | The information officer who tours the offices, writes the handouts, and keeps the directory current | Produces the derived material. |
+| Query skill | The concierge who, given your question, points you to the right handout or office | Steers you; can only send you where you're already allowed in — the offices' own locks still decide. |
 
-A nuance from the strategy: a book can carry its *own* "peer-reviewed" stamp (trust native to the DS), separate from reader slips (DL confirmation signals) — and the reference librarian weighs both.
-
-**A restaurant.** The **kitchens** cook the real food (DS). A **meal-prep service** turns that into ready-to-eat boxes and a tasting menu (DL). **Diner reviews** say which dishes were actually good (confirmation signals). A **directory at the pickup counter** — "boxed salads: case 3; tasting menu: shelf B" — tells you where each *prepped* item sits (catalog); it points at the boxes, not the recipes.
-
-**Maps / GPS.** The **physical streets and buildings** are the ground truth (DS). A **map** is a derived, simplified rendering kept in sync with reality (DL). **User reports** — "this road is closed," "great coffee here" — are confirmation signals. An **atlas's index** — "this region is on sheet 42" — is the catalog: it tells you which derived map sheet to open, not what's on the ground.
-
-**On the catalog specifically** (the easy one to get backwards): it indexes *where DL outputs live*, not what's inside the sources — like a **building's lobby directory** (Company → Suite 4B). It sends you to the right office without describing what the company does, and when a tenant moves you change one line, not the offices. In every analogy above, "catalog" is this kind of location directory over the *derived* artifacts — never an index of raw DS content.
+Two nuances from the strategy:
+- The lobby directory indexes *where prepared materials live*, never the offices' contents — so a wrong directory line can misdirect you, but it can't unlock a door.
+- An office can post its own "certified" plaque (trust native to the DS), separate from visitor feedback cards (DL confirmation signals); the concierge weighs both.
 
 ---
 
