@@ -14,7 +14,7 @@ Other acronyms used below:
 - **OIDC / OAuth** — the standard identity/authorization protocols that produce the verified token carrying the user's identity.
 - **BI** (business intelligence) — operational dashboards and reporting (the Parallel Track).
 
-**The strategy.** This is an implementation strategy for Leveraging Institutional Knowledge (LIK). It starts by *buying* (Level 0) to learn what's actually missing, then *builds* progressively (Levels 1–4) only where a bought tool falls short — with a parallel data-pipeline track. Each level adds one standalone capability and is justified by a limitation in the level before it. But standalone capability isn't standalone ROI: Levels 2–4 pay off only once Level 1 adoption shows the same questions recurring across many users — reuse is the value, so treat that recurrence as a precondition to check, not an assumption.
+**The strategy.** This is an implementation strategy for Leveraging Institutional Knowledge (LIK). It starts by *buying* (Level 0) to learn what's actually missing, then *builds* progressively (Levels 1–3) only where a bought tool falls short — with a parallel data-pipeline track. Each level adds one standalone capability and is justified by a limitation in the level before it. But standalone capability isn't standalone ROI: Levels 2–3 pay off only once Level 1 adoption shows the same questions recurring across many users — reuse is the value, so treat that recurrence as a precondition to check, not an assumption.
 
 The strategy is deliberately evidence-driven: ship a layer, learn from it, and only spend on the next if the prior one proved the need. Every layer ends with a **limitation** — the reason the next one exists.
 
@@ -44,7 +44,7 @@ A turnkey tool is a black box — possible limitations include: you can't change
 - *Federated / connector* (e.g., SearchUnify) queries sources at read time and doesn't persist a full copy.
 - Many are *hybrid*.
 
-The gaps catalogued here become the **build backlog** for Levels 1–4 — and if none are worth the cost, the strategy correctly stops at Level 0.
+The gaps catalogued here become the **build backlog** for Levels 1–3 — and if none are worth the cost, the strategy correctly stops at Level 0.
 
 ---
 
@@ -167,11 +167,21 @@ A signal store is non-versioned, so its writer runs under **governed-writer cont
 
 ### Expected limitations of this level
 
-DL's signals rank by what can be **derived** — freshness, provenance, co-occurrence, obsolescence. But nothing captures whether a person actually found an answer *correct*: trust is inferred from the data, never confirmed by a human. Two answers can look equally fresh and well-sourced while one is right and one is wrong, and computed signals can't tell them apart. That missing human judgment is what Level 3 adds.
+Level 2 leaves two open problems, each solvable independently:
+
+- **No human trust signal.** DL's signals rank by what can be *derived* — freshness, provenance, co-occurrence, obsolescence — but nothing captures whether a person actually found an answer *correct*. Two answers can look equally fresh and well-sourced while one is right and one is wrong; computed signals can't tell them apart.
+- **No single entry point.** DL outputs are deliberately scattered across many stores — a Confluence page here, a signal table there. Every tool must either hard-code that topology or fan out and search every store — reintroducing the Level 1 problem one layer up.
+
+### After Level 2 — two independent extensions
+
+Levels 3-Confirmations and 3-Catalog each address one of the two limitations above and have no dependency on each other — both require Level 2, neither requires the other. Build them in whichever order the gap backlog suggests matters most:
+
+- **Level 3-Confirmations** adds the missing human trust signal.
+- **Level 3-Catalog** adds the missing single entry point.
 
 ---
 
-## Level 3 — User confirmations
+## Level 3-Confirmations — User confirmations
 
 **Goal:** capture the one trust signal Level 2 can't compute — a person saying *"this answer was right"* (or wrong) — and feed it back into retrieval. These confirmations are produced by people, not derived from the DSs, so they are the one part of DL that isn't recomputable.
 
@@ -213,13 +223,9 @@ Confirmation signals are the one durable, non-recomputable part of DL (§3.1), s
 
 What stays live is recent, un-promoted trust; everything else has either moved into the DS or into an archive tier.
 
-### Expected limitations of this level
-
-DL now deliberately **spreads outputs across many stores** — a Confluence page here, a signal table there, a confirmation table somewhere else. To use them, every tool must hard-code that storage topology, or fan out and search every store — reintroducing the Level 1 problem one layer up. There is **no single known place to start**.
-
 ---
 
-## Level 4 — The catalog (a Confluence page)
+## Level 3-Catalog — The catalog (a Confluence page)
 
 **Goal:** give every consumer **one lookup** to discover where any DL output lives, decoupled from storage decisions.
 
@@ -253,13 +259,13 @@ It is a **deterministic path** — no AI in the loop:
 DSs → Deterministic Pipeline → Warehouse → BI Dashboards
 ```
 
-- **Deterministic pipelines** handle known, repeatable transforms — dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts — typically materialized in a **warehouse**. They assign each output a sharing group (the same fail-closed model as §2) and register their outputs in the catalog (Level 4), exactly like the DL-creation skill does.
+- **Deterministic pipelines** handle known, repeatable transforms — dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts — typically materialized in a **warehouse**. They assign each output a sharing group (the same fail-closed model as §2) and register their outputs in the catalog (Level 3-Catalog), exactly like the DL-creation skill does.
 - **The warehouse is exposed via MCP like any other DS.** An agent or app queries it through the same `verified-SSO-token` path; the catalog points to warehouse tables (`store_kind = warehouse`, `bq://dataset.table`) just as it points to a Confluence page. To consumers, the warehouse is simply one more discoverable store.
 - The warehouse is also **one option for DL's machine-retrieval backing store at scale** — the natural promotion target from §2.2 when signal volume is large. It is *one possibility*, not a requirement of the architecture.
 
 *Hardening (inline):* the warehouse is a non-versioned store, so its writers (pipelines and any DL-signal promotion landing here) run under the **governed-writer controls** — no long-lived keys, rotation, least privilege, audit logging. A BigQuery warehouse honors a Google Group via IAM directly; an admin only has to provision a Group for an audience whose source DS isn't already group-based.
 
-Because it's a parallel track, it can be deferred entirely, or pulled forward ahead of Level 4 if reporting is the more urgent need.
+Because it's a parallel track, it can be deferred entirely, or pulled forward ahead of Level 3-Catalog if reporting is the more urgent need.
 
 ---
 
@@ -309,7 +315,7 @@ Every artifact the strategy creates, where it lives, who writes it, and how it's
   - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
   - *Access control:* group-share for reads; users never get direct write access
 
-- **Catalog** *(Discovery Layer output — the index over the others)* (Level 4) — the "yellow pages" mapping `type + subject → location`
+- **Catalog** *(Discovery Layer output — the index over the others)* (Level 3-Catalog) — the "yellow pages" mapping `type + subject → location`
   - *Resides in:* a **Confluence page at a well-known address** (updated in place, stable address) → Postgres / indexed DB at scale
   - *Written by:* the DL-creation skill's **service account** (e.g., `summarizer@navapbc.com`) + a small set of **named catalog owners**
   - *Read/used by:* **every consumer** — the first stop to find where any DL output lives
@@ -341,9 +347,9 @@ Every element of [lik-architecture-concise.md](lik-architecture-concise.md) land
 | Provision/maintain a Google Group for audiences whose source isn't group-based | 2 (Access control) / Parallel Track |
 | Human-readable artifacts | 2.1 |
 | Machine retrieval signals | 2.2 |
-| Confirmation signals (durable DL-origin) | 3.1 |
-| Consuming confirmation signals at query time (annotation / staleness / ranking) | 3.2 |
-| The catalog, schema, DL-creation skill (non-human account), validate/re-derive | 4 |
+| Confirmation signals (durable DL-origin) | 3-Confirmations §3.1 |
+| Consuming confirmation signals at query time (annotation / staleness / ranking) | 3-Confirmations §3.2 |
+| The catalog, schema, DL-creation skill (non-human account), validate/re-derive | 3-Catalog |
 | Store promotion (page/table → DB), governed-writer controls | 2.2 / 4 / Parallel Track (inline) |
 | Deterministic pipeline, warehouse, BI dashboards | Parallel Track |
 
@@ -354,8 +360,7 @@ Each layer is an **evidence-driven bet**, and the order is chosen so each one's 
 - **Level 0** establishes whether a bought tool is already good enough, and — win or lose — yields the gap backlog that justifies any build at all. This operationalizes the build-vs-buy open question and the front-loaded build-vs-buy experiment from [lik-architecture-concise.md §11](lik-architecture-concise.md): buy first, A/B against the bought baseline, build only the gaps.
 - **Level 1** proves SSO-gated MCP access is enough for real work.
 - **Level 2** proves precomputed outputs beat fan-out search.
-- **Level 3** proves a human trust signal — user confirmations — improves answers in ways computed signals can't.
-- **Level 4** proves a single transparent catalog beats per-store lookups.
+- **Levels 3-Confirmations and 3-Catalog** are independent of each other — both build on Level 2, neither requires the other. Level 3-Confirmations proves a human trust signal improves answers in ways computed signals can't; Level 3-Catalog proves a single catalog entry point beats per-store fan-out. The gap backlog guides which to build first.
 - The **deterministic pipeline** runs as a parallel track, adding reporting whenever BI demands it.
 
 Ship one, learn, then spend on the next — rather than committing to the full system up front.
