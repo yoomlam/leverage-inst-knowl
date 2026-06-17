@@ -163,7 +163,26 @@ Confluence is required here: the Google Drive connector can only create new file
 
 Indexes, prioritized pointers, retrieval hints, freshness/obsolescence signals → saved to a **service-fronted table** to start; BigQuery or Postgres at scale. Like §2.4, signals are updated in place as freshness changes — a write the Google Drive connector can't do — so they don't begin life in a Sheet.
 
-A signal store is non-versioned, so its writer runs under **governed-writer controls**: no long-lived keys (e.g., Workload Identity Federation), a rotation schedule, least privilege, and audit logging on all writes. If signals land in Postgres, it additionally needs the group → role bridge noted in §2.3.
+A signal store is non-versioned, so its writer runs under **governed-writer controls**: no long-lived keys (e.g., Workload Identity Federation), a rotation schedule, least privilege, and audit logging on all writes. If signals land in Postgres, it additionally needs the group → role bridge noted in §2.3 — realized by the service in §2.6.
+
+### 2.6 The service-fronted store — one MCP write/read path
+
+The signal store (§2.5), the confirmation store (§3.1), and a promoted catalog (Level 3-Catalog) all become the **same thing** once they outgrow a Confluence page: a database we own, reached through an **MCP service** — the same interface agents already use for the DSs. That service *is* the "service-fronted store" / "Postgres + app" those sections name; treat it as **one component, not three**. To a consumer, reading a DL signal looks exactly like reading a DS.
+
+**Scoped tools, never raw SQL.** The service exposes intent-named tools — e.g. `confirm_source`, `upsert_signal`, `register_catalog_entry` — each enforcing its own rules at the moment of writing. This is the whole reason a store graduates to a database: §3.1 promotes confirmations precisely to *hard-enforce* rate-limiting, de-duplication, and "reject a confirmation whose citation doesn't resolve." A generic `run_sql` or `upsert(table, row)` tool would hand that enforcement back to the caller and forfeit the reason for moving off the page. The validation lives in the tool.
+
+**Two writer identities — a different shape than Level 1.** A Level 1 MCP proxies the *user's* identity through to a DS (§1.1 token exchange). This service instead writes under its **own service identity** to a store we own, in one of two modes:
+
+- **Service-only** — machine retrieval signals and catalog rows, written by the DL-creation skill's service identity with no user in the loop.
+- **Service + user assertion** — a confirmation is written by the service account but carries the confirming user's verified identity as `confirmed_by` (§3.1); the tool needs the user's token both to attribute the write and to rate-limit per person.
+
+**What the service owns.** Centralizing the path puts three already-required disciplines in one place instead of scattering them:
+
+- **Reads** resolve the caller's Google Groups into a row-level-security predicate — the §2.3 `group → Postgres role` bridge — so the same service gates reads and writes under the §2 group-share model.
+- **Governed-writer controls** on its database connection: keyless rotated credentials, least privilege, audit logging on every write (§2.5).
+- **Backup/retention** for the confirmation tables specifically — the durable, non-recomputable exception (§3.1); signals and catalog rows recover by re-derivation.
+
+**Start as one service.** One service fronting all three output types, with separate database roles and tables per type to bound a compromise (§2.1). Split into separate services only if confirmations' write-enforcement later needs an isolation the others don't — don't start there.
 
 ### Expected limitations of this level
 
@@ -199,7 +218,7 @@ Users can confirm that a **DL output** or a **DS data** an AI built its response
 Like all DL writes, a **service account writes the confirmation to the store** — users never get direct write access to the confirmation store. The **confirming user's verified identity is captured as an attributed field** (e.g., `confirmed_by`), and routing every write through the service lets it enforce validation, **rate-limiting / de-duplication** (so no one inflates a record's trust by confirming it repeatedly), and provenance at write time. Concretely: at most one confirmation per user per cited source-version, and a minimum count of distinct confirmers before trust affects ranking (§3.2). Read access follows the §2 group-share model.
 
 - **Start as a Confluence-page table:** updatable in place (unlike a create-only Drive Sheet), so the service account appends and de-duplicates against the same page; page restrictions gate writers, SSO attributes each write, version history is the audit log, and revert recovers a bad write.
-- **Promote** to a service-fronted store (e.g., Postgres + an app) when scale, untrusted writers, or high-stakes ranking demand hard write-time enforcement of rate-limiting and de-duplication, under the §2.2 governed-writer controls. Being **durable and non-recomputable**, confirmation signals also need their own **backup/retention** — unlike the rest of DL, they can't be rebuilt from the DSs.
+- **Promote** to the service-fronted store (§2.6, e.g., Postgres + an app) when scale, untrusted writers, or high-stakes ranking demand hard write-time enforcement of rate-limiting and de-duplication, under the §2.2 governed-writer controls. Being **durable and non-recomputable**, confirmation signals also need their own **backup/retention** — unlike the rest of DL, they can't be rebuilt from the DSs.
 
 ### 3.2 Using confirmation signals at query time
 
@@ -239,7 +258,7 @@ It is the one artifact nothing points *to*, so it lives at a **well-known addres
 
 *Hardening (inline):*
 - **The catalog stores pointers, not permissions.** Real access is enforced at each target store's group grant (§2 access control), so a tampered or wrong catalog row can *misdirect* a lookup but can never *widen* access. That bounds the blast radius of a bad write; restricting writers to the skill account and named owners (above) then keeps the shared entry point from being broken or redirected by any editor.
-- **Promotion.** When subject count or pointer volume outgrows a page, promote the *same logical schema* to **Postgres or any indexed DB** — consumers still do one `(entry_type, subject)` lookup. A catalog in a non-versioned store takes on the **governed-writer discipline** and adds its own audit columns (`created_at` / `updated_at` / `updated_by`), which the Confluence-page realization doesn't need. Because the catalog is the a-priori entry point, promotion must preserve its **well-known address**: consumers reach it through a stable alias/indirection, not the page's raw URL, so the backing store can change underneath without breaking any consumer.
+- **Promotion.** When subject count or pointer volume outgrows a page, promote the *same logical schema* to **Postgres or any indexed DB**, served by the §2.6 service — consumers still do one `(entry_type, subject)` lookup. A catalog in a non-versioned store takes on the **governed-writer discipline** and adds its own audit columns (`created_at` / `updated_at` / `updated_by`), which the Confluence-page realization doesn't need. Because the catalog is the a-priori entry point, promotion must preserve its **well-known address**: consumers reach it through a stable alias/indirection, not the page's raw URL, so the backing store can change underneath without breaking any consumer.
 
 **Result.** Tools have one known starting point instead of fanning out per query. This is the core of "data democracy": authorized users reach knowledge without knowing where any artifact physically lives.
 
