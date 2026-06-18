@@ -1,5 +1,7 @@
 # Institutional Knowledge for AI Enablement — Concise Architecture
 
+*This is the technical design. For a plain-language introduction to the core concepts, start with [lik-overview.md](lik-overview.md). For the phased build plan, see [lik-strategy.md](lik-strategy.md).*
+
 ## 1. Purpose
 
 Make institutional knowledge available to AI agents, AI-enabled apps, search platforms, and people — without each tool re-running expensive, repetitive searches across every source system.
@@ -189,18 +191,7 @@ Without DL each tool re-searches many DSs, raising latency, token usage, cost, m
 
 ## 11. Recommended MVP
 
-1. Pick a few high-value DSs.
-2. Google SSO + Groups for access control; attach Groups to sensitive DS data where possible.
-3. Define the admin mapping process for DSs where Groups can't be attached.
-4. Propagate ACL metadata into DL.
-5. Realize the catalog as a **single Confluence page** (schema in §3) + a few computed-output locations; promote to Postgres/an indexed DB only when scale demands.
-6. Build deterministic pipelines for BI artifacts only if/when the BI path is in scope.
-7. Build a scheduled/manual AI skill that updates AI-assisted content and registers each output in the catalog, with source + pointer staleness checks; optionally expose it via MCP and allow direct runs.
-8. Populate DL with computed outputs, choosing the store per output type/integrity need.
-9. Expose DSs and DL via MCP.
-10. Capture confirmations from one pilot app (Confluence-page table first).
-11. Require durable writes in DSs; provenance-mark AI-generated artifacts.
-12. Test with one or two AI-enabled workflows.
+The phased, evidence-driven build plan (buy first, then build only the gaps) lives in **[lik-strategy.md](lik-strategy.md)** — Levels 0–3 plus the parallel data-pipeline track. It is the authoritative sequencing for an MVP and beyond.
 
 Goal: prove DL improves retrieval quality, speed, and trust without creating a second source of truth.
 

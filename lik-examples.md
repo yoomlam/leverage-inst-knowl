@@ -1,26 +1,4 @@
-Following are examples of how LIK concepts map to current Nava solutions.
-
-- *DL-creation skill* takes *DS records* and creates *DL data*
-- *Query skill* queries *DL data* and *DS records* to answer user questions/requests
-
-### Analogy (intuition): an office building
-
-Picture a large office building.
-
-| LIK concept | Office building | Why it fits |
-| --- | --- | --- |
-| DS records | The individual offices, where the real work and records are kept | The source of truth; each office controls who it lets in (its own permissions). |
-| DL data | Handouts and digests *about* what the offices do — posted at reception, on floor screens, in a kiosk | Derived so you don't have to visit every office; scattered across spots; can be regenerated from the offices anytime. |
-| Confirmation signals | Visitor feedback cards — "Suite 4B actually solved my problem" | People vouching an answer was good; kept on the card, not inside the office. |
-| Catalog | The lobby directory — topic → where its prepared material is posted | The one board everyone checks first; points to *where the handout lives*, not what's inside the offices. Move a handout and you change one directory line, not the offices. |
-| DL-creation skill | The information officer who tours the offices, writes the handouts, and keeps the directory current | Produces the derived material. |
-| Query skill | The concierge who, given your question, points you to the right handout or office | Steers you; can only send you where you're already allowed in — the offices' own locks still decide. |
-
-Two nuances from the strategy:
-- The lobby directory indexes *where prepared materials live*, never the offices' contents — so a wrong directory line can misdirect you, but it can't unlock a door.
-- An office can post its own "certified" plaque (trust native to the DS), separate from visitor feedback cards (DL confirmation signals); the concierge weighs both.
-
----
+How LIK concepts map to current Nava solutions. For the concepts themselves (and the office-building analogy), see [lik-overview.md](lik-overview.md).
 
 ## Current Nava solutions
 
