@@ -1,4 +1,6 @@
-How LIK concepts map to current Nava solutions. For the concepts themselves (and the office-building analogy), see [lik-overview.md](lik-overview.md).
+How LIK concepts map to current Nava solutions. For the concepts themselves (and the office-building analogy), see [lik-1-overview.md](lik-1-overview.md).
+
+Each solution below has **its own DL-creation skill and its own Query skill**, specialized to its sources and questions (e.g., Project Indexes' Knowledge Graph Bot vs. OPIS's AWS Lambda) — a concrete illustration that there are *many* of each skill, not one.
 
 ## Current Nava solutions
 
@@ -64,18 +66,3 @@ How LIK concepts map to current Nava solutions. For the concepts themselves (and
 * DL Confirmation signals: add entry
 * DL Catalog: add Catalog entries of summarized DL data
 * Query skill: via MCP
-
-
-
----
-
-Template -- Solution X
-* DS records: 
-* DL-creation skill: 
-* DL data
-    * Human-readable artifacts: 
-    * Machine retrieval signals: 
-* DL Confirmation signals:
-* DL Catalog: 
-* Query skill:
-

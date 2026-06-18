@@ -1,6 +1,6 @@
 # Institutional Knowledge for AI Enablement — Concise Architecture
 
-*This is the technical design. For a plain-language introduction to the core concepts, start with [lik-overview.md](lik-overview.md). For the phased build plan, see [lik-strategy.md](lik-strategy.md).*
+*This is the technical design. For a plain-language introduction to the core concepts, start with [lik-1-overview.md](lik-1-overview.md). For the phased build plan, see [lik-4-strategy.md](lik-4-strategy.md).*
 
 ## 1. Purpose
 
@@ -125,8 +125,8 @@ Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hin
 
 ```
 DSs → Deterministic Pipeline → DL (warehouse) → BI Dashboards
-DSs → AI Skill → DL (catalog + chosen store, via MCP)
-AI tools → read DL catalog → follow pointers to the right store
+DSs → AI Skill (one of many, per source/team/project) → DL (catalog + chosen store, via MCP)
+AI tools → Query skill (one of many, per topic) → known DL output directly, else read catalog → follow pointers
 Confirmations → Confluence page (default) or integrity-enforcing store (at scale)
 Durable updates → DSs
 ```
@@ -135,7 +135,7 @@ Durable updates → DSs
 
 **5.2 DL population & refresh** — ACL metadata propagated into DL; deterministic artifacts via pipelines (no AI); AI-assisted content via scheduled/manual skills that compute outputs, write each to its store via MCP, register locations in the catalog, and run staleness checks on referenced DS content *and* their own pointers.
 
-**5.3 Query & retrieval** — AI tools query DSs and DL via MCP under a verified SSO token. They read the catalog, then follow pointers. **Enforcement tier:** where DL is materialized in a queryable store, the DL MCP resolves the caller's groups into query predicates (or uses BigQuery authorized views / row-access policies keyed to SSO identity) so restricted rows are never returned pre-filtering. Where an artifact lives in a DS, that DS's native permissions enforce.
+**5.3 Query & retrieval** — AI tools query DSs and DL via MCP under a verified SSO token, guided by **one of many topic-specialized query skills**. A skill that already knows where its topic's outputs live points straight at them, **skipping the catalog**; otherwise the agent reads the catalog, then follows pointers. **Enforcement tier:** where DL is materialized in a queryable store, the DL MCP resolves the caller's groups into query predicates (or uses BigQuery authorized views / row-access policies keyed to SSO identity) so restricted rows are never returned pre-filtering. Where an artifact lives in a DS, that DS's native permissions enforce.
 
 **5.4 Feedback & source updates** — users confirm usefulness/accuracy; confirmations **start as a Confluence-page table** (attributed, revertible), promoted to an integrity-enforcing store when write-time rate-limiting/provenance is needed. Durable updates always go to DSs.
 
@@ -144,7 +144,7 @@ Durable updates → DSs
 All updates propagate/assign ACL metadata and register location in the catalog.
 
 - **Deterministic data pipelines** — for known, repeatable transforms (dashboard tables, aggregations, metrics, reporting indexes, scheduled extracts), typically materialized in a warehouse. No AI.
-- **AI skills** — for interpretation-heavy content. The skill reads DS content (respecting ACLs), computes indexes/aggregations/categories, detects freshness/obsolescence, runs staleness checks on sources *and* its own pointers, chooses and writes to a backing store via MCP, registers the catalog entry, provenance-marks human-readable artifacts, rebuilds content, and updates trust/confirmation metadata.
+- **AI skills** — for interpretation-heavy content. A skill reads DS content (respecting ACLs), computes indexes/aggregations/categories, detects freshness/obsolescence, runs staleness checks on sources *and* its own pointers, chooses and writes to a backing store via MCP, registers the catalog entry, provenance-marks human-readable artifacts, rebuilds content, and updates trust/confirmation metadata. **There are many such skills, not one** — each is customized to the source it handles (its type, location, and owning team/project/program), validating and processing that source per that group's conventions and emitting a specific output type to a specific store.
 
 **Skill identity & scope** — the most privileged *reader*; read scope defined explicitly **per DS, least-privilege**. It must capture each item's **source ACL at read time** (failure silently widens access). Write posture depends on the target (§4). Reads and writes to non-versioned stores are audit-logged; version-history DS writes are audited by that history. Because version history is corrective, each run also validates catalog entries / dangling pointers and re-derives owned rows.
 
@@ -191,7 +191,7 @@ Without DL each tool re-searches many DSs, raising latency, token usage, cost, m
 
 ## 11. Recommended MVP
 
-The phased, evidence-driven build plan (buy first, then build only the gaps) lives in **[lik-strategy.md](lik-strategy.md)** — Levels 0–3 plus the parallel data-pipeline track. It is the authoritative sequencing for an MVP and beyond.
+The phased, evidence-driven build plan (buy first, then build only the gaps) lives in **[lik-4-strategy.md](lik-4-strategy.md)** — Levels 0–3 plus the parallel data-pipeline track. It is the authoritative sequencing for an MVP and beyond.
 
 Goal: prove DL improves retrieval quality, speed, and trust without creating a second source of truth.
 
