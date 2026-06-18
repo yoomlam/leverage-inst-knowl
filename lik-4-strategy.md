@@ -209,7 +209,7 @@ Levels 3-Confirmations and 3-Catalog each address one of the two limitations abo
 
 ### 3.1 Confirmation signals
 
-Users can confirm that a **DL output** or a **DS data** an AI built its response from is trustworthy -- confirming the underlying source of truth feeds the ranking signals of §2.2. These confirmations **originate in DL** from user feedback and exist in **no DS** — they are **durable DL-origin data**, the one part of DL that is *not* recomputable. **Revert is their only recovery.** This makes confirmation signals one of the strategy's few **irreversible commitments** — with human-created artifacts (Key terms), the places the otherwise stop-anytime, recomputable design takes on durable custodial data that needs its own backup/retention.
+Users can confirm that a **DL output** or a **DS data** an AI built its response from is trustworthy -- confirming the underlying source of truth feeds the ranking signals of §2.2. These confirmations **originate in DL** from user feedback and exist in **no DS** — they are **durable DL-origin data**, the one part of DL that is *not* recomputable. *(Confirming an answer that exists in **no** DL or DS yet is a different gesture — not a trust signal on existing data but a request to **create** one; that belongs to Level 4, see §4.1.)* **Revert is their only recovery.** This makes confirmation signals one of the strategy's few **irreversible commitments** — with human-created artifacts (Key terms), the places the otherwise stop-anytime, recomputable design takes on durable custodial data that needs its own backup/retention.
 
 **Linking a signal to its data.** A confirmation attaches to data only if the response is traceable to it via the §1.3 "always cite source links" convention — the citation is the join key. That convention is guidance, not a guarantee, so the confirm path **rejects a confirmation whose citation doesn't resolve** rather than attaching it loosely. Each signal also records the **version of the confirmed data** as its own column (e.g., doc revision, ticket `updated_at`), so a later edit doesn't silently inherit trust the prior version earned.
 
@@ -274,6 +274,69 @@ It is the one artifact nothing points *to*, so it lives at a **well-known addres
 **A topic-scoped skill can skip the catalog.** Because there are **many Query skills, each expert on a topic** (§1.3), a skill built for a known subject can point the agent **straight at the specific DL outputs it already knows**, with no catalog lookup at all — the fastest path. The catalog is the **fallback** for questions a skill can't place directly: a general skill, or a specialized one that hits an unknown subject, resolves the question to a key and looks it up. So the catalog isn't always step one — it's the shared map for whatever a skill hasn't already memorized.
 
 **Consulting the catalog is a targeted lookup, not a full read.** The skill directs the agent to resolve the question to a `(entry_type, subject)` key and fetch only the matching row(s) — never to load the whole catalog and scan it. The catalog grows with every subject DL covers, so reading it whole would reintroduce the per-query bloat the catalog exists to remove and would break the moment it outgrows what fits in a single read. The skill's job is therefore to turn a user's intent into the right key (expanding the same acronyms, codenames, and canonical phrasing it already knows from §1.3); the catalog answers the keyed lookup. This holds in both realizations — a keyed lookup against the Confluence page today, an indexed `(entry_type, subject)` query after promotion (§2.6) — so the consumer's access pattern never changes as the catalog scales.
+
+---
+
+## Level 4 — Flywheel: confirmed answers become new DL outputs
+
+**Goal:** grow DL coverage from the questions people actually ask. When the **Query skill** synthesizes an answer across several DSs that exists in no DL output yet, and a user confirms it's correct, offer to persist that confirmed synthesis as a new durable artifact — so the next person retrieves it instead of re-deriving it.
+
+The gap this closes: Level 2's DL-creation skills must **guess** what to precompute, and Level 3-Confirmations only captures trust on outputs that *already exist*. Neither turns a one-off cross-source answer — correct, but living only in one chat transcript — into reusable DL. Level 4 makes every confirmed novel synthesis a candidate DL output, so coverage grows **demand-driven** rather than by guesswork. It builds on Level 1 (the §1.3 Query skill and §1.2 write model do the work) and uses Level 3-Catalog to make each new output discoverable; it does *not* depend on Level 3-Confirmations.
+
+### 4.1 The confirm-to-create gesture
+
+This is **not** a §3.1 confirmation signal. Those attach trust to data that already exists — a DL output or DS record the answer cited. When the Query skill **synthesizes an answer across multiple DSs that matches no existing DL output**, a confirmation has nothing to attach to; the gesture is instead a request to **create** the missing artifact. Level 4 adds this one capability to the **Query skill**: after such an answer, it offers to save it — as simply as *"Create a Confluence page / Google Doc from this answer?"*
+
+- **The skill detects the trigger.** It already knows whether it answered from an existing DL output (it looked one up) or had to fan out across DSs and synthesize. Only the latter — a synthesis with no DL home — prompts the offer.
+- **Whole answer or parts.** A response may stitch together several sources; the user can save the whole synthesis or just the section that was the good one.
+- **Opt-in and user-driven.** The user vouches for both the *content* (this answer is right) and the *action* (yes, save it). No silent writes.
+
+Once the artifact exists, ordinary §3.1 confirmations apply to it like any other DL output — but that is downstream reuse, not what creates it.
+
+### 4.2 What gets written, and where
+
+The persisted artifact follows the **§1.2 write model unchanged** — new knowledge written by the user's agent under the **user's own SSO** into a DS (a Confluence page or Google Doc). Nothing new in the access model: the artifact **inherits its location's native ACLs** automatically (§1.2), so a synthesis saved into a restricted space stays restricted.
+
+Because a person vouched for it at creation, it is born **`human-verified`** (§2.2) — durable, not recomputable, attributed to the creating user in version history. Like confirmation signals and other human-authored artifacts, it is one of the strategy's durable, **non-recomputable** commitments (Key terms, §3.1): it can't be rebuilt from the DSs, so it needs its own backup/retention, and revert is its only recovery.
+
+The new artifact is **registered in the catalog** (§4.3) so the next consumer discovers it through the same single lookup as any other DL output, and from there it behaves exactly like a §2.4 human-readable artifact — read under the group-share model, ranked with the same signals, and eligible for further confirmations (§3.1).
+
+### 4.3 Registering in the catalog
+
+The artifact is written by the user's agent under their own SSO (§4.2), but the **catalog row is not** — §3-Catalog limits catalog writes to the DL-creation skill's service account and named owners, and a regular user is neither. The same split confirmations use applies (§3.1: the user supplies the signal, a service account writes the store): **the user creates the artifact; a service registers the pointer.**
+
+After writing the artifact, the Query skill calls the §2.6 scoped tool `register_catalog_entry` with the user's verified assertion. The service performs the catalog write under **its own service identity** — preserving the narrow-writer rule — and captures the creating user as `created_by`. This adds a second writer mode for catalog rows: §2.6 today writes them **service-only**; Level 4 writes them **service + user assertion**, the mode §2.6 already defines for confirmations.
+
+The tool enforces three things at write time (the reason §2.6 forbids raw SQL):
+
+- **Pointer resolves** — reject if the artifact doesn't exist, mirroring §3.1's citation-must-resolve rule.
+- **Sensitivity (§2.3)** — the row's declared audience must be no broader than the artifact's actual ACLs, so registering a pointer can never widen access.
+- **De-dup** — an existing row for the same `(entry_type, subject)` is updated in place, not duplicated (§4.1 guardrail, §2.4).
+
+The row is marked **human-created**, not `row_provenance = 'skill'`: the §3-Catalog validation pass can't re-derive a human synthesis, so it **validates the pointer but doesn't recompute the row**, dropping or flagging it only if it goes dangling — revert is its recovery, consistent with its durable, non-recomputable nature (§4.2).
+
+Routing through the service account works in **both catalog realizations**: the service does the Confluence-page write today and the indexed-DB write after promotion (§2.6). Nothing forces promotion — but Level 4 is a real argument for it, since catalog growth now comes from many users, not a handful of named owners.
+
+### 4.4 The flywheel
+
+Each turn of the loop makes the next answer cheaper:
+
+1. A user asks something with no DL answer; the Query skill fans out across DSs and synthesizes.
+2. The user confirms the answer and saves it (§4.1–4.2).
+3. The synthesis is now a durable DL output, discoverable via the catalog.
+4. The next person asking the same thing retrieves it in one step instead of re-fanning out — and can confirm it too, accruing trust (§3.2).
+
+Usage drives confirmations; confirmations drive new DL outputs; new outputs make answers faster and cheaper; faster answers drive more usage. DL coverage grows toward the questions people actually ask — the opposite of precomputing outputs nobody reads.
+
+### Guardrails
+
+- **One sensitivity tier per artifact (§2.3).** A cross-source synthesis can blend content from differently-restricted DSs. The save path must place it in a location no broader than its **most-restricted input** — default-deny when in doubt — so persisting an answer never widens access beyond what its sources allowed.
+- **No duplication storms.** Before creating, the skill checks the catalog for an existing artifact on the same `(entry_type, subject)` and updates it in place (§2.4) rather than spawning near-duplicates — the same de-duplication discipline confirmations use (§3.1).
+- **Trust the source, not the synthesis, long-term.** A saved synthesis goes stale as its underlying DSs change and — unlike an `AI-generated` output — isn't re-derived. The §3.2 staleness signals flag it ("confirmed, but sources edited since"), and the §3.3 backpropagation path lets its trust eventually move into the source DSs, after which the standalone synthesis can be archived.
+
+### Expected limitations of this level
+
+The flywheel only covers subjects that get **asked about and confirmed** — a cold-start topic nobody has queried yet still has no DL output. So Level 4 complements, rather than replaces, Level 2's proactive precomputation: the DL-creation skill seeds coverage for known-important subjects, while the flywheel fills in coverage demand reveals.
 
 ---
 
@@ -345,6 +408,13 @@ Every artifact the strategy creates, where it lives, who writes it, and how it's
   - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
   - *Access control:* group-share for reads; users never get direct write access
 
+- **Persisted synthesis** *(Discovery Layer output)* (Level 4) — a confirmed cross-DS answer saved as a new artifact
+  - *Resides in:* a Confluence page or Google Doc (a DS), registered in the catalog
+  - *Written by:* the **user's own agent under their SSO** (§1.2 write model), born `human-verified`
+  - *Read/used by:* people in the sharing group, via the catalog — like any §2.4 artifact
+  - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
+  - *Access control:* the DS's native ACLs; inherits its location's protections, no broader than its most-restricted source
+
 - **Catalog** *(Discovery Layer output — the index over the others)* (Level 3-Catalog) — the "yellow pages" mapping `type + subject → location`
   - *Resides in:* a **Confluence page at a well-known address** (updated in place, stable address) → Postgres / indexed DB at scale
   - *Written by:* the DL-creation skill's **service account** (e.g., `summarizer@navapbc.com`) + a small set of **named catalog owners**
@@ -380,7 +450,8 @@ Every element of [lik-3-architecture-concise.md](lik-3-architecture-concise.md) 
 | Confirmation signals (durable DL-origin) | 3-Confirmations §3.1 |
 | Consuming confirmation signals at query time (annotation / staleness / ranking) | 3-Confirmations §3.2 |
 | The catalog, schema, DL-creation skill (non-human account), validate/re-derive | 3-Catalog |
-| Store promotion (page/table → DB), governed-writer controls | 2.2 / 4 / Parallel Track (inline) |
+| Flywheel: confirmed cross-source answers persisted as new DL outputs | 4 |
+| Store promotion (page/table → DB), governed-writer controls | 2.2 / 2.6 / Parallel Track (inline) |
 | Deterministic pipeline, warehouse, BI dashboards | Parallel Track |
 
 ## Why this strategy
@@ -391,6 +462,7 @@ Each layer is an **evidence-driven bet**, and the order is chosen so each one's 
 - **Level 1** proves SSO-gated MCP access is enough for real work.
 - **Level 2** proves precomputed outputs beat fan-out search.
 - **Levels 3-Confirmations and 3-Catalog** are independent of each other — both build on Level 2, neither requires the other. Level 3-Confirmations proves a human trust signal improves answers in ways computed signals can't; Level 3-Catalog proves a single catalog entry point beats per-store fan-out. The gap backlog guides which to build first.
+- **Level 4** turns confirmed cross-source answers into reusable DL outputs, so coverage grows from real demand rather than precomputed guesses — complementing Level 2's proactive precomputation.
 - The **deterministic pipeline** runs as a parallel track, adding reporting whenever BI demands it.
 
 Ship one, learn, then spend on the next — rather than committing to the full system up front.

@@ -10,7 +10,20 @@ A company's knowledge is scattered across many systems — Google Drive, Conflue
 
 Leave the knowledge where it already lives. On top of it, add a lightweight layer that makes finding things fast — **without** copying everything into one place and **without** creating a second, competing "source of truth." The layer is *computed*: it is derived from the original systems and can be rebuilt from them at any time.
 
-## The six concepts
+## Guiding Principles
+
+Every design choice in the later docs traces back to these.
+
+- **Very low maintenance** — minimize the code and extra data we have to keep running. Most of the layer is recomputed from the sources, so it can be rebuilt or discarded rather than carefully tended.
+- **Loosely coupled** — keep the pieces independent so any one — a store, a source, a tool — can be swapped without rewriting the rest, and no single vendor becomes hard to leave.
+- **Intuitive (easy to understand and adopt)** — lean on standards (e.g., MCP) and common patterns rather than bespoke mechanisms, so people and tools pick it up quickly.
+- **Flexible** — adaptable to a wide range of questions, data, and tools: many small, specialized skills instead of one rigid system.
+- **One source of truth** — durable knowledge always stays in its original system. The layer holds only computed copies, pointers, and signals — never a competing master record.
+- **Secure by default** — least privilege, deny when unsure, and access always enforced by the *original system*, never by the layer's own metadata. A wrong entry can misdirect a lookup but can never unlock a door.
+- **Build on existing sign-in** — most systems are already reached through Google single sign-on, so access reuses that existing login and its group permissions instead of standing up a new identity or permission system to maintain. (Sources that don't already use Google groups for permissions need a one-time mapping — see the architecture for details.)
+- **Earn each step** — buy before building, and add each capability only once the previous one's limits prove it's needed; spend follows evidence, not ambition.
+
+## The concepts and terminology
 
 1. **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed (Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, …). These stay the **source of truth**: every lasting change is written here, and each system keeps controlling who may see what.
 
@@ -29,6 +42,15 @@ Two relationships tie these together:
 - The **DL-creation skill** takes **DS records** and creates **DL data**.
 - The **Query skill** queries **DL data** and **DS records** to answer a person's question.
 
+## Progressive disclosure: answering in cheap steps
+
+The catalog and the Discovery Layer let an agent find an answer in increasingly specific steps, instead of loading everything at once. Each step costs more than the one before, and most questions are answered before reaching the bottom.
+
+1. **Catalog** *(the entry point)* — one lookup to learn *what exists and where* (the high-level roadmap).
+2. **Discovery Layer** *(narrowing down)* — follow the pointer to prepared material already distilled from the sources (a summary, index, or signal).
+3. **Data Sources** *(the original records)* — open the full records only when the question demands them.
+4. **On-demand discovery** *(following links)* — from inside a record, follow links to related records to expand understanding as needed.
+
 ## Analogy: an office building
 
 | LIK concept | Office building | Why it fits |
@@ -45,14 +67,19 @@ A few nuances:
 - An office can post its own "certified" plaque (trust native to the source), separate from visitor feedback cards (DL confirmation signals); the concierge weighs both.
 - There isn't one concierge or one information officer but **several, each specialized**. A concierge who already knows your topic can walk you straight to the right handout without checking the lobby directory first; the directory is there for questions no concierge has memorized.
 
-## Progressive disclosure: answering in cheap steps
+### Other analogies
 
-The catalog and the Discovery Layer let an agent find an answer in increasingly specific steps, instead of loading everything at once. Each step costs more than the one before, and most questions are answered before reaching the bottom.
+**A restaurant**
+- DS: The **kitchens** cook the real food. 
+- DL: A **meal-prep service** turns that into ready-to-eat boxes and a tasting menu.
+- Catalog: A **directory at the pickup counter** — "boxed salads: case 3; tasting menu: shelf B" — tells you where each *prepped* item sits; it points at the boxes, not the recipes.
+- Confirmation signals: **Diner reviews** say which dishes were actually good.
 
-1. **Catalog** *(the entry point)* — one lookup to learn *what exists and where* (the high-level roadmap).
-2. **Discovery Layer** *(narrowing down)* — follow the pointer to prepared material already distilled from the sources (a summary, index, or signal).
-3. **Data Sources** *(the original records)* — open the full records only when the question demands them.
-4. **On-demand discovery** *(following links)* — from inside a record, follow links to related records to expand understanding as needed.
+**Maps / GPS**
+- DS: The **physical streets and buildings** are the ground truth.
+- DL: A **map** is a derived, simplified rendering kept in sync with reality.
+- Catalog: An **atlas's index** — "this region is on sheet 42"; it tells you which derived map sheet to open, not what's on the ground.
+- Confirmation signals: **User reports** — "this road is closed," "great coffee here".
 
 ## Where to go next
 
