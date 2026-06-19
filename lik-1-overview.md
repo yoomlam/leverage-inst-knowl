@@ -8,7 +8,7 @@ A company's knowledge is scattered across many systems — Google Drive, Conflue
 
 ## The idea
 
-Leave the knowledge where it already lives. On top of it, add a lightweight layer that makes finding things fast — **without** copying everything into one place and **without** creating a second, competing "source of truth." The layer is *computed*: it is derived from the original systems and can be rebuilt from them at any time.
+Leave the knowledge where it already lives. On top of it, add a lightweight layer that makes finding things fast — **without** copying everything into one place and **without** creating a second, competing "source of truth." The layer is *mostly computed*: most of it is derived from the original systems and can be rebuilt from them at any time.
 
 ## Guiding Principles
 
@@ -21,13 +21,13 @@ Every design choice in the later docs traces back to these.
 - **One source of truth** — durable knowledge always stays in its original system. The layer holds only computed copies, pointers, and signals — never a competing master record.
 - **Secure by default** — least privilege, deny when unsure, and access always enforced by the *original system*, never by the layer's own metadata. A wrong entry can misdirect a lookup but can never unlock a door.
 - **Build on existing sign-in** — most systems are already reached through Google single sign-on, so access reuses that existing login and its group permissions instead of standing up a new identity or permission system to maintain. (Sources that don't already use Google groups for permissions need a one-time mapping — see the architecture for details.)
-- **Earn each step** — buy before building, and add each capability only once the previous one's limits prove it's needed; spend follows evidence, not ambition.
+- **Earn each step** — add each capability only once the previous one's limits prove it's needed; spend follows evidence, not ambition.
 
 ## The concepts and terminology
 
-1. **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed (Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, …). These stay the **source of truth**: every lasting change is written here, and each system keeps controlling who may see what.
+1. **Data Sources (DSs)** — the systems where knowledge is actually created, corrected, and governed (Drive, Confluence, Jira, GitHub, Slack, Gmail, Salesforce, Workday, …). These hold the **primary knowledge** — records that exist for their own sake — and stay the **source of truth**: every lasting change is written here, and each system keeps controlling who may see what.
 
-2. **Discovery Layer (DL)** — a layer of *prepared material derived from the Data Sources*: summaries, indexes, pointers, and freshness/trust signals. It exists so tools don't have to re-search everything from scratch. It is recomputable from the sources and is never a second source of truth. Its outputs come in a few flavors — readable summaries, machine retrieval signals, and confirmation signals (below).
+2. **Discovery Layer (DL)** — a layer of *prepared material derived from the Data Sources*: summaries, indexes, pointers, and freshness/trust signals. Its whole reason to exist is to make knowledge **easy to find and reuse** — each piece is cataloged, ranked, and freshness-tracked so tools don't re-search everything from scratch. It is **derived** material — never primary knowledge authored for its own sake (that's a Data Source), and never a second source of truth. A quick test: a DL piece exists only *because* there's something to discover — remove the underlying records and a summary, index, or signal has nothing left to describe. **Most** of it is *recomputable* — rebuilt from the sources on demand, so it's cheap to keep and safe to discard. The exceptions are the parts that come from **people** and can't be re-derived: a summary someone wrote or confirmed as correct, and the confirmation signals (below) — these are kept and backed up deliberately.
 
 3. **Catalog** — the Discovery Layer's "yellow pages": one well-known place that maps a *topic* to *where its prepared material lives*. A tool does **one lookup**, then follows the pointer — instead of searching every system. Move a piece of material and you change one line in the catalog, not the tools that use it.
 
@@ -35,7 +35,7 @@ Every design choice in the later docs traces back to these.
 
 5. **Query skills** — the *guides*. Given a question, a skill steers an AI agent to the right prepared material or the right source. They can only help an agent *find* answers faster — never widen access, because every search runs under the asking person's own permissions. **There are many, not one** — each covers a topic or question type. A skill built for a known topic can go **straight to the relevant prepared material**, skipping the catalog lookup entirely; the catalog is the fallback for questions no skill already knows where to answer.
 
-6. **Confirmation signals** — people vouching that an answer was right (or flagging it wrong). This is the one part of the Discovery Layer that comes from *people*, not something that can be re-derived from the sources — so it is kept and backed up deliberately.
+6. **Confirmation signals** — people vouching that the source behind an answer was right (or flagging it wrong). A confirmation attaches to a **cited source the answer drew from** — a record in a Data Source, or prepared material in the layer — never to the AI's response text itself; that's why answers always cite their sources, so each vouch lands on a specific source rather than the wording of the reply. One of the durable, *people-sourced* parts of the Discovery Layer (above): it can't be re-derived from the sources, so it is kept and backed up deliberately.
 
 Two relationships tie these together:
 
@@ -56,7 +56,7 @@ The catalog and the Discovery Layer let an agent find an answer in increasingly 
 | LIK concept | Office building | Why it fits |
 | --- | --- | --- |
 | DS records | The individual offices, where the real work and records are kept | The source of truth; each office controls who it lets in (its own permissions). |
-| DL data | Handouts and digests *about* what the offices do — posted at reception, on floor screens, in a kiosk | Derived so you don't have to visit every office; scattered across spots; can be regenerated from the offices anytime. |
+| DL data | Handouts and digests *about* what the offices do — posted at reception, on floor screens, in a kiosk | Derived so you don't have to visit every office; scattered across spots; most can be regenerated from the offices anytime. |
 | Confirmation signals | Visitor feedback cards — "Suite 4B actually solved my problem" | People vouching an answer was good; kept on the card, not inside the office. |
 | Catalog | The lobby directory — topic → where its prepared material is posted | The one board everyone checks first; points to *where the handout lives*, not what's inside the offices. Move a handout and you change one directory line, not the offices. |
 | DL-creation skills | Information officers, each assigned to certain offices — they tour those offices, write the handouts, and keep the directory current | Produce the derived material; each specializes in the offices (sources) it knows. |
@@ -81,8 +81,76 @@ A few nuances:
 - Catalog: An **atlas's index** — "this region is on sheet 42"; it tells you which derived map sheet to open, not what's on the ground.
 - Confirmation signals: **User reports** — "this road is closed," "great coffee here".
 
+## Artifacts at a glance
+
+Every artifact the strategy creates, where it lives, who writes it, and how it's used.
+
+- **DS records** — new knowledge, corrections, human-verified summaries
+  - *Resides in:* the relevant Data Source (Confluence, Drive, Jira, GitHub, Slack, etc.)
+  - *Written by:* the user's agent, under the **user's own SSO**
+  - *Read/used by:* anyone with DS permission, via MCP
+  - *Durability:* the **source of truth** — durable; everything else derives from it
+  - *Access control:* the DS's own native ACLs; new data inherits its location's protections automatically
+
+- **Query skill** — shareable "where to look and how to ask" guidance
+  - *Resides in:* a shared skill library, available to any employee
+  - *Written by:* a **named human owner**; versioned
+  - *Read/used by:* every employee's agent, at query time
+  - *Durability:* durable, hand-authored
+  - *Access control:* none needed — it's guidance, not enforcement, and can never widen access
+
+- **DL-creation skill** — the automated *producer* of Discovery Layer outputs
+  - *Resides in:* runs under its **own non-user service identity** (per-DS service principals)
+  - *Written by:* developers / skill authors
+  - *Read/used by:* n/a — it's the engine that writes the DL outputs below
+  - *Durability:* code; durable
+  - *Access control:* keyless rotated credentials, least-privilege per DS, audit-logged writes
+
+- **Human-readable artifacts** *(Discovery Layer output)* — summaries, digests, curated indexes
+  - *Resides in:* a [Confluence page](lik-dl-storage.md#confluence-pages)
+  - *Written by:* the DL-creation skill's **service identity** (tagged `AI-generated`); promoted to `human-verified` under a reviewer's identity
+  - *Read/used by:* people in the sharing group
+  - *Durability:* **recomputable** until human-verified; human-verified / `human-created` are durable
+  - *Access control:* group-share, fail-closed; native store grant (Drive sharing, Confluence restriction)
+
+- **Machine retrieval signals** *(Discovery Layer output)* — indexes, pointers, retrieval/freshness/obsolescence hints
+  - *Resides in:* a small service-fronted table → BigQuery / [Postgres](lik-dl-storage.md#postgres-the-service-fronted-store) at scale
+  - *Written by:* the DL-creation skill's **service identity** (governed-writer controls in non-versioned stores)
+  - *Read/used by:* tools/agents (via Query skills) at query time
+  - *Durability:* **recomputable** from the DSs
+  - *Access control:* group-share, fail-closed; store-native group/role grant
+
+- **Confirmation signals** *(Discovery Layer output)* — user trust and correction feedback
+  - *Resides in:* a [Confluence-page table](lik-dl-storage.md#confluence-pages) → a [service-fronted Postgres store](lik-dl-storage.md#postgres-the-service-fronted-store) at scale
+  - *Written by:* a **service account** (the confirming user captured as `confirmed_by`); rate-limited / de-duped at write
+  - *Read/used by:* Query skills at query time, to shape ranking
+  - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
+  - *Access control:* group-share for reads; users never get direct write access
+
+- **Persisted synthesis** *(Discovery Layer output)* — a confirmed cross-DS answer saved as a new human-created DL artifact
+  - *Resides in:* a [Confluence page or Google Doc](lik-dl-storage.md) (a DS-hosted store), registered in the catalog
+  - *Written by:* the **user's own agent under their SSO** (human-authored DL output), born `human-verified`
+  - *Read/used by:* people in the sharing group, via the catalog — like any other artifact
+  - *Durability:* **durable, NOT recomputable** — revert is the only recovery; needs its own backup/retention
+  - *Access control:* DL group-share, fail-closed; audience no broader than its most-restricted source
+
+- **Catalog** *(Discovery Layer output — the index over the others)* — the "yellow pages" mapping `type + subject → location`
+  - *Resides in:* a **[Confluence page](lik-dl-storage.md#confluence-pages) at a well-known address** → [Postgres](lik-dl-storage.md#postgres-the-service-fronted-store) / indexed DB at scale
+  - *Written by:* the DL-creation skill's **service account** (e.g., `summarizer@navapbc.com`) + a small set of **named catalog owners**
+  - *Read/used by:* **every consumer** — the first stop to find where any DL output lives
+  - *Durability:* skill-owned rows re-derived each run; hand-authored rows rely on revert
+  - *Access control:* reads open for transparency; writes limited to the skill account + named owners
+
+- **Warehouse tables / BI outputs** — deterministic reporting, no AI in the loop
+  - *Resides in:* a warehouse (e.g., BigQuery)
+  - *Written by:* **deterministic pipelines** (governed-writer controls)
+  - *Read/used by:* BI dashboards; agents/apps via MCP; also a promotion target for machine retrieval signals
+  - *Durability:* **recomputable** (deterministic)
+  - *Access control:* the same fail-closed group model; BigQuery IAM honors Google Groups directly
+
 ## Where to go next
 
 - **[lik-2-examples.md](lik-2-examples.md)** — how these concepts map to systems Nava already runs (Project Indexes, OPIS).
 - **[lik-3-architecture-concise.md](lik-3-architecture-concise.md)** — the technical design: components, schema, access control, write model.
 - **[lik-4-strategy.md](lik-4-strategy.md)** — the build plan: buy first, then build progressively where a bought tool falls short.
+- **[lik-dl-storage.md](lik-dl-storage.md)** — the storage reference: how each backing store (Confluence, Google Drive, Postgres) behaves.

@@ -1,4 +1,4 @@
-<svg width="860" height="640" viewBox="0 0 860 640" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+<svg width="860" height="690" viewBox="0 0 860 690" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title>LIK Key Concepts Diagram</title>
   <desc>Architecture diagram showing relationships among Data Sources, MCP, Discovery Layer (Catalog, Human-readable artifacts, Machine retrieval signals, Confirmation signals), DL-creation skill, Query skill, and Users/Agents/Apps.</desc>
 
@@ -21,25 +21,25 @@
   </defs>
 
   <!-- Background -->
-  <rect width="860" height="640" fill="#F5F7FA"/>
+  <rect width="860" height="690" fill="#F5F7FA"/>
 
   <!-- ===== DATA SOURCES ===== -->
-  <rect x="40" y="550" width="780" height="70" rx="7" fill="#1B4A6B"/>
-  <text x="430" y="575" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources</text>
-  <text x="430" y="593" text-anchor="middle" font-size="10" fill="#A8CCED">Confluence · Jira · GitHub · Slack · Google Drive · Gmail · Salesforce · Workday</text>
-  <text x="430" y="609" text-anchor="middle" font-size="9.5" font-style="italic" fill="#7AABCE">Source of Truth — all durable writes happen here</text>
+  <rect x="40" y="602" width="780" height="70" rx="7" fill="#1B4A6B"/>
+  <text x="430" y="627" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Data Sources</text>
+  <text x="430" y="645" text-anchor="middle" font-size="10" fill="#A8CCED">Confluence · Jira · GitHub · Slack · Google Drive · Gmail · Salesforce · Workday</text>
+  <text x="430" y="661" text-anchor="middle" font-size="9.5" font-style="italic" fill="#7AABCE">Source of Truth — all durable writes happen here</text>
 
   <!-- ===== MCP ===== -->
-  <rect x="40" y="472" width="780" height="62" rx="6" fill="#2A7EAA"/>
-  <text x="430" y="496" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">MCP  (Model Context Protocol)</text>
-  <text x="430" y="514" text-anchor="middle" font-size="10" fill="#CBE7F7">Service interface — all reads and writes to Data Sources flow through MCP under a verified user identity</text>
-  <text x="430" y="527" text-anchor="middle" font-size="9" fill="#97C8E8">Each DS enforces its own native permissions on every call</text>
+  <rect x="40" y="524" width="780" height="62" rx="6" fill="#2A7EAA"/>
+  <text x="430" y="548" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">MCP  (Model Context Protocol)</text>
+  <text x="430" y="566" text-anchor="middle" font-size="10" fill="#CBE7F7">Service interface — all reads and writes to Data Sources flow through MCP under a verified user identity</text>
+  <text x="430" y="579" text-anchor="middle" font-size="9" fill="#97C8E8">Each DS enforces its own native permissions on every call</text>
 
   <!-- MCP double arrow -->
-  <line x1="430" y1="472" x2="430" y2="550" stroke="#1B4A6B" stroke-width="2" marker-end="url(#arrDark)" marker-start="url(#arrDarkRev)"/>
+  <line x1="430" y1="586" x2="430" y2="602" stroke="#1B4A6B" stroke-width="2" marker-end="url(#arrDark)" marker-start="url(#arrDarkRev)"/>
 
   <!-- ===== DISCOVERY LAYER box ===== -->
-  <rect x="40" y="128" width="500" height="332" rx="8" fill="#E8F3FA" stroke="#B0D0E8" stroke-width="1.5"/>
+  <rect x="40" y="128" width="500" height="384" rx="8" fill="#E8F3FA" stroke="#B0D0E8" stroke-width="1.5"/>
   <text x="290" y="155" text-anchor="middle" font-size="14" font-weight="700" fill="#1B4A6B">Discovery Layer</text>
   <text x="290" y="172" text-anchor="middle" font-size="9.5" font-style="italic" fill="#5A8BA8">Computed · derived from Data Sources · distributed across many stores</text>
 
@@ -75,8 +75,14 @@
   <text x="290" y="406" text-anchor="middle" font-size="9.5" fill="#8E44AD">user trust feedback · human-originated · durable</text>
   <text x="290" y="421" text-anchor="middle" font-size="8.5" fill="#A569BD" font-style="italic">not recomputable — revert is the only recovery</text>
 
+  <!-- Persisted synthesis (Level 4) -->
+  <rect x="60" y="440" width="460" height="62" rx="5" fill="#FFFFFF" stroke="#B9770E" stroke-width="1.5"/>
+  <text x="290" y="461" text-anchor="middle" font-size="12" font-weight="700" fill="#7E5109">Persisted synthesis  <tspan font-size="9" font-weight="400" fill="#9C640C">(Level 4 — flywheel)</tspan></text>
+  <text x="290" y="477" text-anchor="middle" font-size="9.5" fill="#9C640C">confirmed cross-DS answer saved as a new artifact · registered in Catalog</text>
+  <text x="290" y="492" text-anchor="middle" font-size="8.5" fill="#B9770E" font-style="italic">Confluence page / Google Doc · born human-verified · durable, not recomputable</text>
+
   <!-- DL to MCP -->
-  <line x1="290" y1="460" x2="290" y2="472" stroke="#2A7EAA" stroke-width="1.5" marker-end="url(#arrBlue)"/>
+  <line x1="290" y1="512" x2="290" y2="524" stroke="#2A7EAA" stroke-width="1.5" marker-end="url(#arrBlue)"/>
 
   <!-- ===== DL-CREATION SKILL ===== -->
   <rect x="565" y="272" width="255" height="92" rx="8" fill="#E9F7EF" stroke="#2D8B57" stroke-width="2"/>
@@ -90,9 +96,9 @@
   <text x="541" y="311" text-anchor="middle" font-size="8.5" fill="#2D8B57">produces</text>
 
   <!-- DL-creation to MCP dashed -->
-  <line x1="692" y1="364" x2="692" y2="472" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrGreen)"/>
-  <text x="718" y="422" font-size="8.5" fill="#2D8B57">reads</text>
-  <text x="718" y="434" font-size="8.5" fill="#2D8B57">via MCP</text>
+  <line x1="692" y1="364" x2="692" y2="524" stroke="#2D8B57" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrGreen)"/>
+  <text x="718" y="448" font-size="8.5" fill="#2D8B57">reads</text>
+  <text x="718" y="460" font-size="8.5" fill="#2D8B57">via MCP</text>
 
   <!-- ===== QUERY SKILL ===== -->
   <rect x="565" y="128" width="255" height="92" rx="8" fill="#F4ECF7" stroke="#7D3C98" stroke-width="2"/>
@@ -117,7 +123,7 @@
   <text x="568" y="130" font-size="8.5" fill="#555">answers</text>
 
   <!-- Users write via agent dashed arrow on left -->
-  <line x1="60" y1="100" x2="60" y2="472" stroke="#B0B8C0" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrDark)"/>
-  <text x="30" y="290" text-anchor="middle" font-size="8.5" fill="#A0A8B0" transform="rotate(-90,30,290)">writes via agent</text>
+  <line x1="60" y1="100" x2="60" y2="524" stroke="#B0B8C0" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrDark)"/>
+  <text x="30" y="312" text-anchor="middle" font-size="8.5" fill="#A0A8B0" transform="rotate(-90,30,312)">writes via agent</text>
 
 </svg>

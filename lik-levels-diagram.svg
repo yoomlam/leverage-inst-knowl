@@ -1,17 +1,20 @@
-<svg width="880" height="586" viewBox="0 0 880 586" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
-  <title>LIK Strategy Levels 1–3 Diagram</title>
-  <desc>Progressive build strategy: Level 1 MCP access, Level 2 computed Discovery Layer, then two independent Level 3 extensions — Confirmations and Catalog.</desc>
+<svg width="880" height="740" viewBox="0 0 880 740" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>LIK Strategy Levels 1–4 Diagram</title>
+  <desc>Progressive build strategy: Level 1 MCP access, Level 2 computed Discovery Layer, two independent Level 3 extensions — Confirmations and Catalog — and Level 4, the flywheel that turns confirmed cross-source answers into new Discovery Layer outputs.</desc>
 
   <defs>
     <marker id="a" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
       <path d="M0,0 L7,3.5 L0,7 Z" fill="#444"/>
     </marker>
+    <marker id="aGold" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#B9770E"/>
+    </marker>
   </defs>
 
-  <rect width="880" height="586" fill="#F5F7FA"/>
+  <rect width="880" height="740" fill="#F5F7FA"/>
 
   <!-- Title -->
-  <text x="440" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#1A2A3A">LIK Implementation Strategy — Levels 1–3</text>
+  <text x="440" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#1A2A3A">LIK Implementation Strategy — Levels 1–4</text>
   <text x="440" y="52" text-anchor="middle" font-size="10" fill="#6B7785">Each level addresses a limitation of the one before it. Ship one, learn, then spend on the next.</text>
 
   <!-- ============================== -->
@@ -115,5 +118,50 @@
   <text x="690" y="491" text-anchor="middle" font-size="9" fill="#2A7EAA">Tools consult it first instead of fanning out per query</text>
   <text x="690" y="507" text-anchor="middle" font-size="9" fill="#2A7EAA">Query skills follow catalog pointers, not hard-coded routes</text>
   <text x="690" y="531" text-anchor="middle" font-size="8.5" fill="#7AABCE" font-style="italic">Promotes to Postgres / indexed DB when subjects outgrow a page</text>
+
+  <!-- Connector from Level 3-Catalog down into Level 4 -->
+  <line x1="650" y1="570" x2="650" y2="592" stroke="#B9770E" stroke-width="1.5" marker-end="url(#aGold)"/>
+  <text x="660" y="585" font-size="8" fill="#9C640C">uses Catalog (§4.3)</text>
+
+  <!-- ============================== -->
+  <!-- LEVEL 4 — FLYWHEEL -->
+  <!-- ============================== -->
+  <rect x="30" y="592" width="820" height="128" rx="7" fill="#FEF9E7" stroke="#B9770E" stroke-width="1.5"/>
+  <rect x="30" y="592" width="100" height="128" rx="7" fill="#F8E5A1"/>
+  <text x="80" y="650" text-anchor="middle" font-size="13" font-weight="700" fill="#7E5109">Level 4</text>
+  <text x="80" y="668" text-anchor="middle" font-size="9" fill="#7E5109">Flywheel</text>
+
+  <text x="490" y="612" text-anchor="middle" font-size="10" font-weight="700" fill="#7E5109">Confirmed cross-source answers become new DL outputs — coverage grows from real demand, not guesswork</text>
+  <text x="490" y="625" text-anchor="middle" font-size="8.3" font-style="italic" fill="#9C640C">Builds on Level 1 (§1.2 write model, §1.3 Query skill) and uses Level 3-Catalog · independent of Level 3-Confirmations</text>
+
+  <!-- flywheel steps -->
+  <rect x="148" y="634" width="158" height="50" rx="5" fill="#FFFFFF" stroke="#B9770E" stroke-width="1.1"/>
+  <text x="227" y="652" text-anchor="middle" font-size="8.7" font-weight="700" fill="#7E5109">1 · Query skill synthesizes</text>
+  <text x="227" y="666" text-anchor="middle" font-size="8" fill="#9C640C">fans out across DSs —</text>
+  <text x="227" y="677" text-anchor="middle" font-size="8" fill="#9C640C">no DL answer exists yet</text>
+
+  <rect x="330" y="634" width="158" height="50" rx="5" fill="#FFFFFF" stroke="#B9770E" stroke-width="1.1"/>
+  <text x="409" y="652" text-anchor="middle" font-size="8.7" font-weight="700" fill="#7E5109">2 · User confirms + saves</text>
+  <text x="409" y="666" text-anchor="middle" font-size="8" fill="#9C640C">written to a DS under user SSO</text>
+  <text x="409" y="677" text-anchor="middle" font-size="8" fill="#9C640C">born human-verified · durable</text>
+
+  <rect x="512" y="634" width="158" height="50" rx="5" fill="#FFFFFF" stroke="#B9770E" stroke-width="1.1"/>
+  <text x="591" y="652" text-anchor="middle" font-size="8.7" font-weight="700" fill="#7E5109">3 · Service registers it</text>
+  <text x="591" y="666" text-anchor="middle" font-size="8" fill="#9C640C">catalog row via service identity</text>
+  <text x="591" y="677" text-anchor="middle" font-size="8" fill="#9C640C">+ user assertion (§4.3)</text>
+
+  <rect x="694" y="634" width="158" height="50" rx="5" fill="#FFFFFF" stroke="#B9770E" stroke-width="1.1"/>
+  <text x="773" y="652" text-anchor="middle" font-size="8.7" font-weight="700" fill="#7E5109">4 · Next person retrieves</text>
+  <text x="773" y="666" text-anchor="middle" font-size="8" fill="#9C640C">one lookup, no re-fan-out</text>
+  <text x="773" y="677" text-anchor="middle" font-size="8" fill="#9C640C">can confirm it too → trust</text>
+
+  <!-- arrows between steps -->
+  <line x1="308" y1="659" x2="328" y2="659" stroke="#B9770E" stroke-width="1.3" marker-end="url(#aGold)"/>
+  <line x1="490" y1="659" x2="510" y2="659" stroke="#B9770E" stroke-width="1.3" marker-end="url(#aGold)"/>
+  <line x1="672" y1="659" x2="692" y2="659" stroke="#B9770E" stroke-width="1.3" marker-end="url(#aGold)"/>
+
+  <!-- return loop -->
+  <path d="M773,684 L773,700 L227,700 L227,686" stroke="#B9770E" stroke-width="1.2" fill="none" stroke-dasharray="4,3" marker-end="url(#aGold)"/>
+  <text x="500" y="714" text-anchor="middle" font-size="8.3" font-style="italic" fill="#9C640C">each turn of the loop makes the next answer cheaper — usage drives confirmations, confirmations drive new outputs</text>
 
 </svg>

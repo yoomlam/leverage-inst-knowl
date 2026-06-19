@@ -1,6 +1,6 @@
-# Institutional Knowledge for AI Enablement — Concise Architecture
+# Leveraging Institutional Knowledge — Concise Architecture
 
-*This is the technical design. For a plain-language introduction to the core concepts, start with [lik-1-overview.md](lik-1-overview.md). For the phased build plan, see [lik-4-strategy.md](lik-4-strategy.md).*
+*This is the technical design. For a plain-language introduction to the core concepts, start with [lik-1-overview.md](lik-1-overview.md). For the phased build plan, see [lik-4-strategy.md](lik-4-strategy.md). For how each backing store behaves, see [lik-dl-storage.md](lik-dl-storage.md).*
 
 ## 1. Purpose
 
@@ -22,6 +22,7 @@ What the architecture delivers, at a glance. Details follow in later sections.
 - **Two population mechanisms** — deterministic pipelines (no AI) for repeatable transforms, and AI skills for interpretation-heavy content (§6).
 - **Pluggable backing stores** — each output lands in the right store by consumer and integrity need, all discoverable through the one catalog (§3).
 - **A feedback loop** — users confirm usefulness/accuracy; confirmations are attributed and revertible (§5.4).
+- **A demand-driven flywheel** — a confirmed cross-source answer that exists in no DL output yet can be saved as a new durable DL artifact, so coverage grows from the questions people actually ask (§9; build plan in [lik-4-strategy.md](lik-4-strategy.md) Level 4).
 - **Broad consumer access via MCP** — usable by local agents, commercial apps, or self-hosted platforms, with an explicit third-party trust boundary (§7).
 - **A disciplined write model** — durable writes always go back to the source systems; DL writes only computed data, the catalog, and confirmation signals — never a second source of truth (§9).
 
@@ -33,7 +34,7 @@ The systems where knowledge is created, corrected, summarized, governed, and acc
 **All durable writes happen in a DS:** new knowledge, corrections, and human-verified summaries. DSs remain the source of truth.
 
 ### Discovery Layer (DL)
-A **computed layer derived from DSs** — a *logical role*, not a single store. It comprises:
+A **computed layer derived from DSs** — a *logical role*, not a single store. What makes something DL is **purpose, not location**: it exists to make DS knowledge faster to find and reuse — cataloged, ranked, staleness-tracked — and never holds primary knowledge authored for its own sake (that's a DS record). A DL artifact can physically sit in a DS (a summary in a Confluence page, marked with the `DL-data marker`) and still be DL, because its role is discovery, not being the source of truth. It comprises:
 - **Computed outputs** that speed retrieval: aggregations, indexes, categorization, prioritized pointers, freshness/trust/obsolescence signals, retrieval hints, propagated access-control metadata.
 - **A catalog** mapping `type + subject → location`, so tools know where each output lives.
 
@@ -47,10 +48,10 @@ Realized via whatever the store supports (a column, a label, a page property) �
 - **Access control:** propagated ACL metadata (a *hint* only), restricted-by-default/sensitivity.
 
 #### Pluggable backing store
-Chosen along two axes — **who consumes it** and **how much integrity it needs**:
-- **Human-readable artifacts** (summaries, digests, curated indexes) → a **Confluence page** (updatable in place, so each re-derivation revises the same page). Must be **provenance-marked AI-generated**.
-- **Integrity-critical signals** (confirmations, trust metadata affecting ranking for all users) → **start as a Confluence-page table** (same in-place-updatable model as the catalog): page restrictions gate writers, every write is attributed to an SSO identity, version history is the audit log, revert is recovery. Promote to a store fronted by a service enforcing verified SSO identity, rate-limiting, and provenance at write time (e.g., Postgres + app) when large scale / untrusted writers / high-stakes ranking demand write-time enforcement. One difference from the catalog: these signals are **non-recomputable**, so revert — not skill re-derivation — is the only recovery, and they need their own backup/retention.
-- **Machine retrieval signals** (indexes, pointers, hints) → a service-fronted table vs. Postgres vs. BigQuery is a storage-engine choice driven by scale, not architecture; updated in place, so not a create-only Drive Sheet.
+Chosen along two axes — **who consumes it** and **how much integrity it needs**. Per-store mechanics (in-place vs. create-only, versioned vs. governed, group enforcement) live in **[lik-dl-storage.md](lik-dl-storage.md)**; the routing is:
+- **Human-readable artifacts** (summaries, digests, curated indexes) → a **Confluence page**. Must be **provenance-marked AI-generated**.
+- **Integrity-critical signals** (confirmations, trust metadata affecting ranking for all users) → **start as a Confluence-page table**, promote to a service-fronted Postgres store when large scale / untrusted writers / high-stakes ranking demand write-time enforcement of identity, rate-limiting, and provenance. Unlike the catalog these signals are **non-recomputable**, so revert — not re-derivation — is the only recovery, and they need their own backup/retention.
+- **Machine retrieval signals** (indexes, pointers, hints) → a service-fronted table vs. Postgres vs. BigQuery is a storage-engine choice driven by scale, not architecture.
 
 #### The catalog
 DL's directory — a "yellow pages" you consult to find *where* an output lives (`type + subject → location`), then follow the pointer to it. It is itself a recomputable computed output, but it indexes DL's *topology* (where outputs live) rather than DS content, so it is kept distinct from the content "indexes" above.
@@ -59,13 +60,13 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 
 It is the one un-pointed-to artifact, so it must live at a **well-known address** agents know a priori; everything else is discovered through it. It starts as a **single Confluence page** so no warehouse is needed at small scale.
 
-When in a **version-history DS**, it is treated as **just another DS artifact**, with one tightening: because it's the single entry point every consumer hits first, **write access is limited to the DL skill's service account and a small set of named catalog owners** — reads stay open for transparency, edits are attributed via SSO identity and logged by version history, and a bad edit is reverted. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring. The skill writes it under its **non-human service account** (e.g., `summarizer@navapbc.com`) that appears in version history like any editor.
+When in a **version-history DS**, it is treated as **just another DS artifact** ([lik-dl-storage.md](lik-dl-storage.md#confluence-pages)), with one tightening: because it's the single entry point every consumer hits first, **write access is limited to the DL skill's service account and a small set of named catalog owners** — reads stay open for transparency. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
 
 Two safeguards replace a write-governance regime:
 1. **Access enforcement never trusts the catalog's stored ACL metadata** — real access is enforced at the *target store* (§8), so a tampered hint can't widen access.
 2. Because version history is **corrective, not preventive**, the skill's regular run **validates entries / dangling pointers and re-derives the rows it owns**, bounding the misdirection window. Hand-authored rows it can't re-derive rely on revert.
 
-**Start as a Confluence page, promote to a DB when scale demands.** The catalog begins as a single Confluence page — the lightest realization, updatable in place at a stable address, with page restrictions, SSO-attributed edits, and version history for free (the "just another DS artifact" model above). This suits low-cardinality pointers (dozens to low-hundreds of subjects). When subject count or per-record pointer sets outgrow a page, the same logical schema is **promoted to Postgres (or any indexed DB)** with no change to consumers — they still do one `(entry_type, subject)` lookup against the catalog. A catalog in such a **non-versioned** store takes on the stricter governed-writer discipline (§8) and adds its own audit columns (see below).
+**Start as a Confluence page, promote to a DB when scale demands.** The Confluence-page realization suits low-cardinality pointers (dozens to low-hundreds of subjects). When subject count or per-record pointer sets outgrow a page, the same logical schema is **promoted to Postgres (or any indexed DB)** with no change to consumers — they still do one `(entry_type, subject)` lookup. A catalog in such a **non-versioned** store takes on the [governed-writer discipline](lik-dl-storage.md#governed-writer-controls) and adds its own audit columns (see below). See [lik-dl-storage.md](lik-dl-storage.md) for both stores' mechanics.
 
 ##### Catalog schema
 
@@ -116,9 +117,9 @@ Most DL is **recomputable** from DSs (indexes, aggregations, categorization, hin
 ### Identity rules
 - **Read:** MCP services require a **verified Google OIDC/OAuth token** (audience-validated); the verified email *claim* authorizes access. Identity is carried across each agent → MCP → DL hop via **on-behalf-of token exchange** — each MCP service exchanges the verified Google token for a store-native token, since a DS won't accept a Google-audience token directly. Applies equally to AI agents and automation (e.g., Zapier).
 - **Write to DSs:** the user's verified SSO identity, via the DS's normal permissions.
-- **Write to DL:** depends on the store —
+- **Write to DL:** depends on the store (mechanics in [lik-dl-storage.md](lik-dl-storage.md)) —
   - *Non-versioned store* (warehouse, Postgres): a **governed writer identity** with §8 controls.
-  - *Version-history DS* (Confluence): ordinary DS edit under SSO identity; a skill uses a non-human service account. No special regime. (Google Sheets/Docs are read-only here — the available Drive connector creates files but can't update them in place, so they aren't DL write targets.)
+  - *Version-history DS* (Confluence): ordinary DS edit under SSO identity; a skill uses a non-human service account. No special regime. (Google Sheets/Docs are create-only and can't be updated in place, so they aren't re-derivation write targets.)
   - A skill writing human-readable artifacts into a DS needs **least-privilege native edit access** to the locations it writes (an expansion from a historical read-broad/write-DL-only identity).
 
 ## 5. Data Flows
@@ -169,7 +170,7 @@ Preferred model: **Google SSO + Google Groups.**
 
 **Computed/aggregated artifacts.** A cross-DS aggregation has no single source ACL. Rather than computing a most-restrictive intersection at runtime, each materialized output is assigned **one sensitivity tier / audience group** named by the skill author (**default-deny** until cleared). A genuinely cross-tier output is served either by an **admin-provisioned audience group** whose membership *is* the intended union, or — absent a standing audience — by storing **pointers/instructions** directing permitted users to recompute under their own SSO identity at query time (a plain DS offers only its own sharing, no query-time intersection). The skill never computes an intersection. Before writing, the skill asserts the named group is no broader than every input source's audience; on failure the output stays default-deny.
 
-**Governed-writer controls (non-versioned stores).** The writer identity is a single point of failure (a compromised credential poisons ACLs/hints/trust for all queries). Require: no long-lived keys (e.g., Workload Identity Federation for GCP/BigQuery), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on all writes.
+**Governed-writer controls (non-versioned stores).** The writer identity is a single point of failure (a compromised credential poisons ACLs/hints/trust for all queries), so a non-versioned store's writer runs under the controls listed in [lik-dl-storage.md](lik-dl-storage.md#governed-writer-controls): no long-lived keys, rotation, least privilege, and audit logging on all writes.
 
 **Catalog in a version-history DS** is deliberately *not* under that regime — access enforced at the target store + skill validate/re-derive replace the service-account controls. Applies to versioned stores generally (catalog by default; confirmation/trust signals when on a Confluence page). Confirmation/trust signals are non-recomputable, so revert is their only recovery.
 
@@ -178,7 +179,8 @@ Preferred model: **Google SSO + Google Groups.**
 - **New data** → a DS (policy → Confluence/Drive; decision → ticket/page).
 - **Corrections** → a DS (guide the user to fix the underlying record).
 - **Human-verified summaries** → a DS (DL may index/point to them).
-- **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it. Must be provenance-marked AI-generated, registered in the catalog, and written under a clear identity (user SSO for attended runs, non-human Google account for unattended), governed by native sharing + version history. It is unverified until a human reviews it, becoming human-verified DS content under that human's identity.
+- **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it. Must be provenance-marked AI-generated, registered in the catalog, and written under a clear identity (user SSO for attended runs, non-human Google account for unattended), governed by native sharing + version history. It is unverified until a human reviews it, becoming human-verified DL content — a derived artifact that lives in a DS but stays DL by role (§3) — under that human's identity.
+- **Persisted synthesis** → a confirmed cross-source answer saved as a new **human-created** DL artifact, written under the **user's own SSO** and born `human-verified`; durable and **not recomputable**, so it needs its own backup/retention. Registered in the catalog like any other output (build plan in [lik-4-strategy.md](lik-4-strategy.md) Level 4).
 - **Confirmations** → durable DL-origin data; attributed; **start as a Confluence-page table**, promote to an integrity-enforcing store when write-time enforcement is needed (§5.4).
 - **The catalog** → DL topology, written by the skill service account + named catalog owners (not any editor) when in a version-history DS; reads stay open.
 - **DL writes** → only computed data, the catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
@@ -191,7 +193,7 @@ Without DL each tool re-searches many DSs, raising latency, token usage, cost, m
 
 ## 11. Recommended MVP
 
-The phased, evidence-driven build plan (buy first, then build only the gaps) lives in **[lik-4-strategy.md](lik-4-strategy.md)** — Levels 0–3 plus the parallel data-pipeline track. It is the authoritative sequencing for an MVP and beyond.
+The phased, evidence-driven build plan (buy first, then build only the gaps) lives in **[lik-4-strategy.md](lik-4-strategy.md)** — Levels 0–4 plus the parallel data-pipeline track. It is the authoritative sequencing for an MVP and beyond.
 
 Goal: prove DL improves retrieval quality, speed, and trust without creating a second source of truth.
 
@@ -199,7 +201,7 @@ Goal: prove DL improves retrieval quality, speed, and trust without creating a s
 
 - **Build vs. buy.** Glean/GoSearch/SearchUnify/Onyx/PipesHub/SWIRL already ingest these DSs, enforce permissions, and provide AI retrieval. Decide DL's delta (likely cross-source aggregations + confirmation signals) and consider scoping DL to just that. Compare the MVP against the realistic *buy* alternative, not only "no DL."
 - **MVP is a full production build, not a minimum proof.** Front-load a falsification experiment (index 1–2 DSs, build hints, A/B an agent with vs. without DL) before the full build.
-- **Signal-type prioritization.** Partition the 10 signal types into MVP-required / second-iteration / post-validation.
+- **Signal-type prioritization.** Partition the signal types into MVP-required / second-iteration / post-validation.
 - **AI-skill scope.** The skill bundles ETL + trust/ranking + ACL propagation + store selection + catalog registration; consider narrowing the MVP scope.
 - **DS selection criteria** are undefined (connector availability, Group support, pilot coverage).
 - **Confirmation loop** needs UI, write path, schema, store, consumer — consider deferring post-MVP.
