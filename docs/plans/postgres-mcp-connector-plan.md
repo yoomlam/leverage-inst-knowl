@@ -5,7 +5,7 @@ topic: postgres-mcp-connector
 
 # Implementation Plan — Postgres MCP Connector and the Skill That Uses It
 
-A high-level roadmap for building the **service-fronted store** defined in [lik-strategy.md §2.6](../../lik-strategy.md): one MCP service in front of a Postgres database, plus the skills that write to and read from it. This plan covers all three Discovery Layer (DL) output types — **catalog, machine retrieval signals, and confirmations** — in a single service from the start.
+A high-level roadmap for building the **service-fronted store** defined in [lik-4-strategy.md §2.6](../../lik-4-strategy.md): one MCP service in front of a Postgres database, plus the skills that write to and read from it. This plan covers all three Discovery Layer (DL) output types — **catalog, machine retrieval signals, and confirmations** — in a single service from the start.
 
 This is a roadmap, not an engineering spec: it sets phases, decisions, and success criteria, and leaves tool schemas and table designs to the build phase.
 
@@ -78,11 +78,11 @@ Everything else — the database engine (Postgres), the MCP framework, the deplo
 
 Three logical groups of tables behind the one service, each with its own database role:
 
-- **Catalog** — the "yellow pages" mapping `type + subject → location`. Low volume. Skill-owned rows are re-derived each run; a few hand-authored rows rely on revert. Recomputable.
+- **Catalog** — the "yellow pages" mapping `type + subject → location`. Low volume. Skill-owned rows are re-derived each run; a few human-created rows rely on revert. Recomputable.
 - **Machine retrieval signals** — indexes, pointers, freshness/obsolescence hints, updated in place. Recomputable from the source systems.
 - **Confirmations** — durable human trust signals that exist in no source system. **Not recomputable** — these alone need real backup/retention, and revert is the only recovery.
 
-Detailed columns and schema are deferred to the build phase; the strategy's catalog schema reference is in lik-architecture-concise.md §2.
+Detailed columns and schema are deferred to the build phase; the strategy's catalog schema reference is in lik-3-architecture-concise.md §2.
 
 ---
 

@@ -7,7 +7,7 @@ Discovery Layer (DL) outputs deliberately live in more than one store, picked by
 - **In-place update vs. create-only** — can a re-derivation revise the *same* artifact at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (signals, the catalog, confirmation tables, re-derived summaries) needs in-place update.
 - **Versioned vs. non-versioned** — does the store give attribution, an audit log, and revert *for free*, or must a [governed-writer regime](#governed-writer-controls) supply them?
 
-The three stores below sit at different points on both axes. (A warehouse — e.g. BigQuery — is a fourth option for machine signals at scale; its details stay in the [strategy doc's Parallel Track](lik-4-strategy.md).)
+The three stores below sit at different points on both axes. (A warehouse — e.g. BigQuery — is a fourth option for retrieval signals at scale; its details stay in the [strategy doc's Parallel Track](lik-4-strategy.md).)
 
 ---
 
@@ -23,7 +23,7 @@ The default for anything human-readable and for small-scale tables.
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning must be configured.* |
 | **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is the recovery. For a shared single-entry artifact (the catalog), route every write through the skill service account — human-created rows come via a verified assertion (no direct editing), not from individual editors. |
 
-**Used for:** human-readable artifacts (summaries, digests, curated indexes); the catalog at small scale; machine-signal and confirmation **tables at small scale**, before they outgrow a page.
+**Used for:** summaries & indexes; the catalog at small scale; retrieval-signal and confirmation **tables at small scale**, before they outgrow a page.
 
 ---
 
@@ -54,10 +54,10 @@ The promotion target when a Confluence-page table outgrows its scale (beyond low
 **Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g. `confirm_source`, `upsert_signal`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page. The validation lives in the tool.
 
 **Two writer modes:**
-- **Service-only** — machine signals and catalog rows, written by the skill's service identity with no user in the loop.
+- **Service-only** — retrieval signals and catalog rows, written by the skill's service identity with no user in the loop.
 - **Service + user assertion** — a write attributed to a verified user (e.g. a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the tool needs the user's token both to attribute the write and to rate-limit per person.
 
-**Used for:** machine signals, the catalog, and confirmation tables at scale; high-stakes ranking; untrusted writers needing hard write-time enforcement.
+**Used for:** retrieval signals, the catalog, and confirmation tables at scale; high-stakes ranking; untrusted writers needing hard write-time enforcement.
 
 ---
 
