@@ -35,7 +35,7 @@ Derived hints about how current a piece of prepared material (or its underlying 
 - **A `current` / `stale` / `obsolete` tag** — the explicit `freshness` column.
 - **Last-validated timestamp** — `last_validated_at`: when the skill last confirmed the pointer resolves and the sources are unchanged; a long-ago validation is itself a staleness flag.
 - **Obsolescence** — the record has been superseded (a newer doc replaces it, a ticket is closed/resolved, a space is deprecated).
-- **"Confirmed, but edited since"** — an answer was confirmed accurate, but the source changed afterward, so the prior trust no longer cleanly applies ([07-strategy.md §3.2](07-strategy.md)).
+- **"Confirmed, but edited since"** — a cited source was confirmed accurate, but it changed afterward, so the prior trust no longer cleanly applies ([07-strategy.md §3.2](07-strategy.md)).
 
 ## 3. The Catalog
 
@@ -92,7 +92,7 @@ Durable updates → DSs
 - **Creation & governance** — knowledge created/corrected/summarized in DSs; access via Google SSO + Groups (see [05](05-access-control.md)).
 - **DL population & refresh** — AI-assisted content via scheduled/manual skills that compute outputs, write each to its store via MCP, register locations in the Catalog, and run staleness checks on referenced DS content *and* their own pointers.
 - **Query & retrieval** — AI tools query DSs and DL via MCP under a verified SSO token, guided by one of many topic-specialized query skills. A skill that knows where its topic lives points straight there, skipping the Catalog; otherwise the agent reads the Catalog, then follows pointers.
-- **Feedback & source updates** — users confirm usefulness/accuracy (attributed, revertible); permanent updates always go to DSs.
+- **Feedback & source updates** — users confirm a cited source's usefulness/accuracy (attributed, revertible); permanent updates always go to DSs.
 
 ## 6. Update mechanisms
 
@@ -106,7 +106,7 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **Corrections** → a DS (guide the user to fix the underlying record).
 - **Human-verified summaries** → a DS (DL may index/point to them).
 - **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it; provenance-marked, registered in the Catalog, written under a clear identity. Unverified until a human reviews it, becoming a `human-verified` DL output under that person's identity.
-- **Persisted synthesis** → a confirmed cross-source answer saved as a new `human-created` DL output, under the **user's own SSO**, born `human-verified`; durable and not recomputable ([07 Level 4](07-strategy.md)).
+- **Persisted synthesis** → a user-saved cross-source synthesis stored as a new `human-created` DL output, under the **user's own SSO**, born `human-verified`; durable and not recomputable ([07 Level 4](07-strategy.md)).
 - **Confirmations** → non-recomputable data; attributed; start as a Confluence-page table, promote to an integrity-enforcing store at scale.
 - **The Catalog** → DL topology, written by the skill service account only; reads stay open.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.

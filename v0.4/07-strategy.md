@@ -2,9 +2,16 @@
 
 *The phased build plan. Concepts are defined in [02-concepts.md](02-concepts.md); the design in [04-architecture.md](04-architecture.md); access in [05-access-control.md](05-access-control.md); stores in [06-storage.md](06-storage.md). Unresolved decisions are in [08-open-questions.md](08-open-questions.md).*
 
-**The strategy.** Buy first (Level 0) to learn what's actually missing, then build progressively (Levels 1–4) only where a bought tool falls short. Each level adds one standalone capability, justified by a limitation in the level before it. But standalone capability isn't standalone ROI: Levels 2–3 pay off only once Level 1 adoption shows the same questions recurring across many users — reuse is the value, so treat recurrence as a precondition to check, not an assumption.
+**The strategy** — buy first, then build progressively only where a bought tool falls short. Each level is an **evidence-driven bet**: one standalone capability, justified by a limitation in the level before it, so each build is earned by evidence from the prior level. Ship a level, learn from it, and build the next if warranted. Every level ends with a **limitation** — the reason the next one exists.
 
-Ship a layer, learn from it, and only spend on the next if the prior one proved the need. Every layer ends with a **limitation** — the reason the next one exists.
+The levels, each detailed below:
+
+- **Level 0 — Buy and learn.** Adopt a commercial tool for value today and a baseline, yielding the backlog of gaps that justifies any build at all.
+- **Level 1 — Direct access via MCP.** Our own agent reads and writes the source systems where knowledge already lives, under the user's SSO.
+- **Level 2 — Discovery Layer (DL) outputs.** Precompute reusable results so the agent stops re-searching from scratch.
+- **Level 3-Confirmations.** Capture the human "this source was right" trust signal Level 2 can't compute — a person vouching for the utility of a cited DS record or DL output.
+- **Level 3-Catalog.** One lookup to discover where any DL output lives.
+- **Level 4 — Flywheel.** Saved answers become new DL outputs, so coverage grows from the questions people actually ask.
 
 **Acronyms used below:** **MCP** (Model Context Protocol) — the service interface agents/apps use to read and write DSs (and later DL) under a verified user identity. **ACL** — per-record permissions. **SSO** — single sign-on (Google SSO + Google Groups). **OIDC/OAuth** — the protocols producing the verified identity token.
 
@@ -37,7 +44,7 @@ Commercial enterprise-search / AI-retrieval products already connect to these DS
 The DSs stay the source of truth. Nothing is copied or precomputed yet. Each DS is exposed through an **MCP service**, and the agent reads/writes through it.
 
 ### 1.1 Single agent, read-only
-A local Claude Cowork-style agent connects to a few approved DSs via MCP and reads on the user's behalf. Each MCP service requires a **verified Google OIDC/OAuth token**; identity is carried across every `agent → MCP → DS` hop via **on-behalf-of token exchange**, so the agent only ever sees what the signed-in person can see. The DS applies its **native permissions** directly — no separate enforcement layer, no Google Groups needed for DL yet. *(Each user grants per-DS OAuth consent once; the MCP service vaults and refreshes their tokens.)*
+A local Claude Cowork-style agent connects to a few approved DSs via MCP and reads on the user's behalf. Each MCP service requires a **verified Google OIDC/OAuth token**; identity is carried across every `agent → MCP → DS` hop via **on-behalf-of token exchange**, so the agent only ever sees what the signed-in person can see. The DS applies its **native permissions** directly — no separate enforcement layer. *(Each user grants per-DS OAuth consent once; the MCP service stores and refreshes their tokens.)*
 
 ### 1.2 Read-write to DSs
 The agent writes back under the **user's own SSO**, through each DS's normal permissions. The write model is deliberately narrow and stays fixed for all later levels:
@@ -50,14 +57,14 @@ Because access is enforced per-DS on every read and write, **new data inherits t
 ### 1.3 Query skills — encode *how* to answer
 A raw agent doesn't know the org's retrieval conventions. Capture that know-how once as a **Query skill** — reusable instructions that guide the agent for certain question types — and share it with any employee. A skill can: query a particular DS first for a question type; expand internal acronyms/codenames and prefer canonical phrasing; scope to certain folders/spaces/projects; prefer named authoritative sources; follow a fallback chain instead of fanning out; always cite links and surface last-updated dates; route by team/client/project.
 
-This is the cheapest, human-authored analog of what DL later automates. A skill is **maintained by a named owner**, **versioned**, and improved as the gap backlog reveals where agents go wrong. **Expect many, not one** — each covers a topic/question type with its own owner.
+This is the cheapest way to encode retrieval know-how by hand; DL later automates the scalable *data* behind it — pointers, aggregations, freshness — while the skill itself persists. A skill is **owned and versioned** so skill drift has a responsible fixer — as the gap backlog reveals where agents go wrong, skill updates will be needed. **Expect many Query skills** — each covers a topic/question type with its own maintainers.
 
-Crucially, a skill is **guidance, not enforcement** — which is why it's safe to share with everyone. Every query still runs under the user's SSO, so the DS's permissions decide what comes back. A bad skill can misdirect, but can never leak data the user wasn't entitled to. Never rely on a skill to *restrict* access — gating is always the DS's job.
+Crucially, a skill is **guidance, not enforcement** — which is why it's safe to share with everyone. Every query still runs under the user's SSO, so the DS's permissions decide what comes back. A bad skill can misdirect, but can never leak data the user wasn't entitled to. Never rely on a skill to *restrict* access — access control enforcement is always the DS's job.
 
 ### Broadening the consumers
 The MCP-to-DS path isn't specific to one agent. The same services can back the **Level 0 commercial/self-hosted tools**, repointed at our MCP services so they proxy the end-user's identity. This is where the **third-party trust boundary** ([05](05-access-control.md#third-party-integration-trust-boundary)) applies: require a verifiable end-user assertion alongside any service credential, and reject requests carrying only a service credential.
 
-**Expected limitations.** Where no skill covers a question, a tool must **fan out across every DS** on each request — slow, token-expensive, inconsistent, prone to dead ends. Skills cut blind fan-out for the questions they cover but don't remove the underlying problem. The residuals that motivate Level 2: **no reuse of computed results** (the agent re-runs full retrieval live every query); **hand-authored guidance doesn't scale or compute** (a skill can't carry per-subject pointers for thousands of projects, or precompute aggregations/content-freshness/trust); **skills drift** as DSs change.
+**Expected limitations.** Where no skill covers a question, a tool must **fan out across every DS** on each request — slow, token-expensive, inconsistent, prone to dead ends. Skills cut blind fan-out for the questions they cover but don't remove the underlying problem. The residuals that motivate Level 2: **no reuse of computed results** — even a perfectly-routing skill re-runs the full cross-source retrieval and aggregation live on every query, so the same expensive work is repaid by every user every time; precomputing once and reading many amortizes the cost and gives everyone the same answer. **Hand-authored guidance must be hand-maintained** — a skill's pointers and scoping are written and updated by a person, so they **drift** as projects and DSs change, and upkeep grows with coverage.
 
 ---
 
@@ -68,7 +75,7 @@ The MCP-to-DS path isn't specific to one agent. The same services can back the *
 DL outputs are produced by a **DL-creation skill** under its **own non-user service identity**. DL inputs are untrusted: the skill treats DS content as data, not instructions, and an output's sharing group always comes from the skill's instructions, never inferred from content. Every output is *derived material whose purpose is reuse* — never primary knowledge (that stays a DS record); the line is **role, not location**.
 
 ### 2.1 The DL-creation skill
-Runs on a schedule or on demand, querying **one or more DSs** and producing outputs that can link across them. Its identity is realized as a per-DS service principal (a Slack bot, a Jira/Salesforce service account, a Workday ISU, a GCP service account), each granted **least-privilege read**, authenticating with **keyless, rotated credentials**, writing with audit logging. **Expect many, not one** — each customized to the source it handles and emitting a specific output type to a specific store. Scheduled re-derivation also bounds staleness: a run that finds a source deleted or access revoked drops or re-restricts the derived output. *(Distinct from the §1.3 Query skill — this is the automated producer.)*
+Runs on a schedule or on demand, querying **one or more DSs** and producing outputs that can link across them. Its identity is realized as a per-DS service principal (a Slack bot, a Jira/Salesforce service account, a Workday ISU, a GCP service account), each granted **least-privilege read**, authenticating with **keyless, rotated credentials**, writing with audit logging. **Expect many** — each customized to the source it handles and emitting a specific output type to a specific store. Scheduled re-derivation also bounds staleness: a run that finds a source deleted or access revoked drops or re-restricts the derived output. *(Distinct from the §1.3 Query skill — this is the automated producer.)*
 
 ### 2.2 Authorship and durability
 | State | Written by | Durability |
@@ -96,7 +103,7 @@ The signal store (§2.5), the confirmation store (§3.1-Confirmations), and a pr
 - **What the service owns** — reads resolve the caller's Google Groups into a row-level-security predicate; governed-writer controls on its connection; backup/retention for the confirmation tables (the durable, non-recomputable exception).
 - **Start as one service** fronting all three types, with separate roles/tables per type. Split only if confirmations' write-enforcement later needs isolation the others don't.
 
-**Expected limitations.** Two open problems, each solvable independently: **no human trust signal** (DL ranks by what's *derivable* — content freshness, provenance, co-occurrence — but nothing captures whether a person found an answer *correct*); **no single entry point** (outputs scatter across stores, so every tool must hard-code topology or fan out — the Level 1 problem one layer up).
+**Expected limitations.** Two open problems, each solvable independently: **no human trust signal** (DL ranks by what's *derivable* — content freshness, provenance, co-occurrence — but nothing captures whether a person vouched for a cited source as *correct*); **no single entry point** (outputs scatter across stores, so every tool must hard-code topology or fan out — the Level 1 problem one layer up).
 
 ### After Level 2 — two independent extensions
 Level 3-Confirmations and Level 3-Catalog each address one limitation, with no dependency on each other — both require Level 2, neither requires the other. Build in whichever order the gap backlog favors.
@@ -105,7 +112,7 @@ Level 3-Confirmations and Level 3-Catalog each address one limitation, with no d
 
 ## Level 3-Confirmations — User confirmations
 
-**Goal:** capture the one trust signal Level 2 can't compute — a person saying *"this answer was right"* (or wrong) — and feed it into retrieval. Produced by people, not derived, so it's the one part of DL that isn't recomputable; **revert is its only recovery**.
+**Goal:** capture the one trust signal Level 2 can't compute — a person vouching that a cited source (a DS record or DL output) *was right* or wrong, not the generated answer — and feed it into retrieval. Produced by people, not derived, so it's the one part of DL that isn't recomputable; **revert is its only recovery**.
 
 ### 3.1 Confirmation signals
 A user confirms that a **DL output** or **DS record** an AI built its response from is trustworthy. These originate in DL, exist in no DS, and are **non-recomputable data**. *(Confirming an answer that exists in no DL or DS yet is a different gesture — a request to **create** one; that's Level 4.)*
@@ -180,17 +187,3 @@ Usage surfaces answers worth saving; saved answers become new outputs; new outpu
 - **Trust the source, not the synthesis, long-term** — a saved synthesis isn't re-derived, so it goes stale; §3.2 staleness signals flag it, and §3.3 backpropagation lets its trust eventually move into the source DSs, after which the standalone synthesis can be archived.
 
 **Expected limitation.** The flywheel only covers subjects that get **asked about and confirmed** — a cold-start topic nobody queried has no DL output. So Level 4 complements Level 2's proactive precomputation rather than replacing it.
-
----
-
-## Why this strategy
-
-Each layer is an **evidence-driven bet**, ordered so each one's spend is justified by evidence from the layer before:
-
-- **Level 0** establishes whether a bought tool is already good enough, and yields the gap backlog that justifies any build at all. Buy first, A/B against the bought baseline, build only the gaps.
-- **Level 1** proves SSO-gated MCP access is enough for real work.
-- **Level 2** proves precomputed outputs beat fan-out search.
-- **Levels 3-Confirmations and 3-Catalog** are independent — both build on Level 2, neither requires the other. One proves a human trust signal improves answers; the other proves a single entry point beats per-store fan-out. The gap backlog guides which comes first.
-- **Level 4** turns saved cross-source answers into reusable outputs, so coverage grows from real demand — complementing Level 2's precomputation.
-
-Ship one, learn, then spend on the next — rather than committing to the full system up front.
