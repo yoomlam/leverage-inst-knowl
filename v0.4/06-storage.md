@@ -1,11 +1,11 @@
 # Storage Reference
 
-*How each backing store behaves once chosen. The [architecture](04-architecture.md) and [strategy](07-strategy.md) decide **which** output lands in **which** store; this file documents **how** each store behaves — so those docs link here instead of repeating the mechanics.*
+*How each backing store behaves once chosen. The <u>Architecture</u> and <u>Strategy</u> decide **which** output lands in **which** store; this file documents **how** each store behaves — so those docs refer here instead of repeating the mechanics.*
 
 Discovery Layer (DL) outputs deliberately live in more than one store, picked by **who consumes the output** and **how much write-time integrity it needs**. Two properties drive every choice:
 
 - **In-place update vs. create-only** — can a re-derivation revise the *same* artifact at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (the Catalog, confirmation tables, re-derived summaries) needs in-place update.
-- **Versioned vs. non-versioned** — does the store give attribution, an audit log, and revert *for free*, or must a [governed-writer regime](#governed-writer-controls) supply them?
+- **Versioned vs. non-versioned** — does the store give attribution, an audit log, and revert *for free*, or must a governed-writer regime supply them?
 
 The three stores below sit at different points on both axes.
 
@@ -48,7 +48,7 @@ The promotion target when a Confluence-page table outgrows its scale (beyond low
 | **Write model** | In-place; reached through an **MCP service** — the same interface agents use for the Data Sources. |
 | **Versioning** | **Non-versioned** — no free attribution, audit log, or revert. Adds its **own audit columns** (`created_at` / `updated_at` / `updated_by`) and relies on **backup/retention** for recovery. |
 | **Access enforcement** | No native Google Group grant. Needs a **`Google Group → Postgres role` bridge**, or a fronting service that resolves the caller's groups into a **row-level-security predicate**. (Index the access-group column — GIN — for query-time filtering.) |
-| **Governance** | A non-versioned store, so its writer runs under the [governed-writer controls](#governed-writer-controls). |
+| **Governance** | A non-versioned store, so its writer runs under the governed-writer controls. |
 | **Backup/retention** | Required for the **non-recomputable** data it holds — confirmation signals, plus any human-created Catalog rows a non-versioned store can't revert. Skill-computed signals and Catalog rows recover by re-derivation; human-created/verified *artifacts* aren't stored here — they live in a DS, which backs them up. |
 
 **Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g., `confirm_source`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page.

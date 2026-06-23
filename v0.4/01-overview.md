@@ -1,6 +1,6 @@
 # Leveraging Institutional Knowledge — Overview
 
-*A plain-language introduction to what we're building and why. The concepts are explained in [02-concepts.md](02-concepts.md); engineers should continue to the [architecture](04-architecture.md) and [strategy](07-strategy.md).*
+*A plain-language introduction to what we're building and why. The concepts are explained in <u>Concepts</u>; engineers should continue to the <u>Architecture</u> and <u>Strategy</u>.*
 
 ## The problem
 
@@ -29,12 +29,12 @@ Every design choice traces back to these.
 - **Flexible** — adaptable to a wide range of questions, data, and tools: many small, specialized skills instead of one rigid system.
 - **One source of truth** — authoritative knowledge always stays in its original data source. The Discovery Layer holds only computed copies, pointers, and signals — never a competing master record.
 - **Secure by default** — least privilege, deny when unsure, and access always enforced by the *original data source*, never by the Discovery Layer's own metadata. A wrong entry can misdirect a lookup but can never unlock a door.
-- **Build on existing sign-in** — access reuses the existing Google SSO (single sign-on) and its group permissions instead of standing up a new identity system. (Sources that don't already use Google groups need a one-time mapping — see the [architecture](04-architecture.md).)
+- **Build on existing sign-in** — access reuses the existing Google SSO (single sign-on) and its group permissions instead of standing up a new identity system. (Sources that don't already use Google groups need a one-time mapping — see <u>Architecture</u>.)
 - **Earn each step** — add each capability only once the previous one's limits prove it's needed; spend follows evidence, not ambition.
 
 ## The approach: buy first, then build only the gaps
 
-We don't commit to the full system up front. The [strategy](07-strategy.md) is a sequence of evidence-driven bets, each justified by a limitation in the one before it:
+We don't commit to the full system up front. The <u>Strategy</u> is a sequence of evidence-driven bets, each justified by a limitation in the one before it:
 
 1. **Buy a commercial tool and learn.** Adopt an existing enterprise-search product, run it for a few months, and catalog exactly where it falls short. If nothing is worth building, we stop here.
 2. **Direct access via standard interfaces.** Build our own agent that reads and writes knowledge in the data sources where it already lives, governed by existing sign-in.
@@ -46,7 +46,7 @@ Each step ships, we learn from it, and we only spend on the next if the prior on
 
 ## Where to go next
 
-- **[02-concepts.md](02-concepts.md)** — the core concepts in plain language, with analogies.
-- **[03-examples.md](03-examples.md)** — how these map to systems Nava already runs.
-- **[04-architecture.md](04-architecture.md)** — the technical design (for engineers).
-- **[07-strategy.md](07-strategy.md)** — the phased build plan (for engineers).
+- **<u>Concepts</u>** — the core concepts in plain language, with analogies.
+- **<u>Examples</u>** — how these map to systems Nava already runs.
+- **<u>Architecture</u>** — the technical design (for engineers).
+- **<u>Strategy</u>** — the phased build plan (for engineers).

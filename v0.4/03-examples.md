@@ -1,6 +1,6 @@
 # Examples — Mapping to Current Nava Solutions
 
-*How the [concepts](02-concepts.md) map to systems Nava already runs. Each solution has **its own DL-creation skill and its own Query skill**, specialized to its sources and questions — a concrete illustration that there are *many* of each skill, not one.*
+*How the <u>Concepts</u> map to systems Nava already runs. Each solution has **its own DL-creation skill and its own Query skill**, specialized to its sources and questions — a concrete illustration that there are *many* of each skill, not one.*
 
 ## At a glance
 

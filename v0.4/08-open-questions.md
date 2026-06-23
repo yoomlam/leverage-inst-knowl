@@ -1,6 +1,6 @@
 # Open Questions
 
-*Unresolved decisions for review, collected from across the [architecture](04-architecture.md) and [strategy](07-strategy.md). Each must be settled before or during the level it affects.*
+*Unresolved decisions for review, collected from across the <u>Architecture</u> and <u>Strategy</u>. Each must be settled before or during the level it affects.*
 
 ## Strategy & scope
 
@@ -17,7 +17,7 @@
 
 ## Catalog
 
-- **Catalog scale ceiling.** Format is decided (Confluence page first, schema in [04 §3](04-architecture.md#catalog-schema), promote to Postgres / indexed DB). Still open: the concrete subject-count / pointer-volume threshold that triggers promotion, and the migration runbook (page → DB), including how in-flight skill writes are handled during cutover.
+- **Catalog scale ceiling.** Format is decided (Confluence page first, schema in <u>Architecture</u> §3, promote to Postgres / indexed DB). Still open: the concrete subject-count / pointer-volume threshold that triggers promotion, and the migration runbook (page → DB), including how in-flight skill writes are handled during cutover.
 - **Catalog write integrity: detection & recovery.** With every write going through the skill account (autonomously, or under a verified human assertion for human-created rows), still open: detection cadence/trigger (skill validation pass vs. edit alerting), how the skill handles non-re-derivable human-created rows (validate the pointer, leave the row to revert), and the acceptable bound on the bad-pointer misdirection window.
 
 ## Provenance

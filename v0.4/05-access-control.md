@@ -1,6 +1,6 @@
 # Access Control & Identity
 
-*How access is enforced and how identity travels through the system. Per-store mechanics (how each store honors a group, governed-writer controls) are in [06-storage.md](06-storage.md).*
+*How access is enforced and how identity travels through the system. Per-store mechanics (how each store honors a group, governed-writer controls) are in <u>Storage</u>.*
 
 ## Model: Google SSO + Google Groups
 
@@ -10,7 +10,7 @@ The whole design reuses the existing Google sign-in rather than standing up a ne
 
 Most DSs don't express permissions as Google Groups (Slack channels, Atlassian roles, Salesforce profiles, Workday models). For each DS feeding a *materialized* DL store, document whether Group attachment is possible and, where not, how native ACLs normalize. There the mapping is the **primary** mechanism.
 
-**For the Discovery Layer:** propagated ACL metadata is used for routing only; real enforcement is the target store's. Where an artifact lives in a DS, that DS's native permissions enforce. Write governance is per store (see [06](06-storage.md)).
+**For the Discovery Layer:** propagated ACL metadata is used for routing only; real enforcement is the target store's. Where an artifact lives in a DS, that DS's native permissions enforce. Write governance is per store (see <u>Storage</u>).
 
 ## Identity rules
 
@@ -25,7 +25,7 @@ Most DSs don't express permissions as Google Groups (Slack channels, Atlassian r
 
 ## The permission-freshness contract
 
-This is about **permission freshness** — whether access has been revoked — a separate concern from the **content freshness** described in [04-architecture.md](04-architecture.md#content-freshness-signals). The two have opposite risk profiles and refresh on independent cycles.
+This is about **permission freshness** — whether access has been revoked — a separate concern from the **content freshness** described in <u>Architecture</u>. The two have opposite risk profiles and refresh on independent cycles.
 
 Propagated ACL metadata is a **cache**; a stale cache leaks access after revocation. **Permission refresh is decoupled from content-staleness refresh.** For sensitive categories, DL either re-validates against the live DS/Group at query time, or enforces a **maximum propagation lag** with a **fail-closed default**.
 
@@ -45,11 +45,11 @@ Every DL output carries one of:
 2. **Explicitly unrestricted** — an affirmative flag set to open the output org-wide.
 3. **Unspecified → default-deny** — shared only with a restricted fallback group. Absence of a decision is never "open."
 
-Enforcement is the **store's own native group/role grant** (mechanics per store in [06](06-storage.md)). Where a source isn't already group-based, an admin must provision a matching Google Group or the output stays default-deny.
+Enforcement is the **store's own native group/role grant** (mechanics per store in <u>Storage</u>). Where a source isn't already group-based, an admin must provision a matching Google Group or the output stays default-deny.
 
 ## Governed-writer controls (non-versioned stores)
 
-A non-versioned store's writer identity is a single point of failure — a compromised credential poisons ACLs, hints, and trust for every query. So it runs under: **no long-lived keys** (e.g., Workload Identity Federation), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on every write. Full mechanics in [06-storage.md](06-storage.md#governed-writer-controls).
+A non-versioned store's writer identity is a single point of failure — a compromised credential poisons ACLs, hints, and trust for every query. So it runs under: **no long-lived keys** (e.g., Workload Identity Federation), a **rotation schedule**, **least privilege** (write only to designated DL locations), and **audit logging** on every write. Full mechanics in <u>Storage</u>.
 
 **A Catalog in a version-history DS is deliberately *not* under that regime** — access enforced at the target store + the skill's validate/re-derive pass replace the service-account controls. Confirmation/trust signals on a Confluence page are non-recomputable, so revert is their only recovery.
 

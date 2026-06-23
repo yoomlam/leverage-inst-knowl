@@ -1,6 +1,6 @@
 # Core Concepts
 
-*The vocabulary used throughout these docs, in plain language. For the technical design, see [04-architecture.md](04-architecture.md).*
+*The vocabulary used throughout these docs, in plain language. For the technical design, see <u>Architecture</u>.*
 
 ## The concepts and terminology
 
