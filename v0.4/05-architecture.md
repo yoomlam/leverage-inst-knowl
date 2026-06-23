@@ -8,6 +8,8 @@ Make institutional knowledge available to AI agents, AI-enabled apps, search pla
 
 Knowledge stays in the **Data Sources (DSs)**. A low-maintenance **Discovery Layer (DL)** — a reusable computed layer plus a single Catalog to discover it — gives tools one known place to start instead of fanning out per query, making discovery, prioritization, and retrieval faster and more reliable. It doesn't replace DSs; it makes them easier to use.
 
+> **Use case — secured project information (courtesy of Ryn Bennett).** Portfolio managers restrict PMR meeting notes, the only place comprehensive per-program risk metrics are discussed; MA PFML now requires Program Manager approval to share sprint metrics. These walls inhibit data democracy. Independently-vetted [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) was created as a workaround.
+
 ## 2. Core components
 
 ### Data Sources (DSs)
@@ -17,7 +19,7 @@ The systems where knowledge is created, corrected, summarized, governed, and acc
 A **computed layer derived from DSs** — a *logical role, not a single store*. What makes something DL is **purpose, not location**: it exists to make DS knowledge faster to find and reuse, and never holds primary knowledge authored for its own sake. Each piece is a **DL output**, and by **where it lives and who backs it up** every output is one of three:
 - **A DS record** — most DL by volume: a summary, aggregation, index, categorization, prioritized pointer, retrieval hint, relationship map, dedup/canonical pointer, content-freshness/obsolescence signal, or propagated access-control hint, written into a DS and tagged with a `discovery-layer` marker. Still DL by role, but **a DS record for storage — the DS governs and backs it up** (so its durability is only as good as that DS's backup), with version-history revert as recovery. Born `ai-generated` and recomputable (rebuilt on demand); a person editing or verifying it makes that copy durable (`human-created`/`human-verified`).
 - **The Catalog** — a directory mapping `type + subject → location` so tools know where each output lives (§3). Recomputable, so it's rebuilt rather than backed up.
-- **Confirmation signals** — captured human trust that is no DS record and can't be derived from any DS. The **one DL output DL must retain deliberately** — recoverable only by restoring an earlier version, so wherever it outgrows a DS page into DL's own store, that store is what DL backs up (<u>Strategy</u> §3.1).
+- **Confirmation signals** — captured human trust that is no DS record and can't be derived from any DS. The **one DL output DL must retain deliberately** — recoverable only by restoring an earlier version, so wherever it outgrows a DS page into DL's own store, that store is what DL backs up (backup/retention mechanics in <u>Storage</u>).
 
 ### Tags that travel with a DL output
 Realized via whatever the store supports (a column, a label, a page property) — no bespoke system.
@@ -26,7 +28,7 @@ Realized via whatever the store supports (a column, a label, a page property) �
 - **Classification:** entry type + subject (Catalog keys), category (also an ACL-mapping input).
 - **Access control:** propagated ACL metadata (a *hint* only), sensitivity.
 
-#### Content-freshness signals
+### Content-freshness signals
 Derived hints about how current a piece of prepared material (or its underlying source) is, so a consumer can judge whether to trust it. They are *content* freshness — distinct from the **permission freshness** of <u>Access Control</u>, which tracks whether access has been revoked. Each is produced from a Catalog-schema column (§3):
 - **Last-updated date** — the underlying source record's own modified timestamp ("source last edited 3 days ago" vs. "2 years ago").
 - **Version drift** — the output was computed from source `v5` but the source is now `v7`; detected by comparing the version/etag stored in `source_refs`.
@@ -41,11 +43,11 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 
 **Why it's needed:** DL deliberately spreads outputs across many stores. Without one known starting point, every tool would hard-code the topology or fan out and search every store on each query — the exact repetitive searching DL exists to eliminate. The Catalog gives consumers **one lookup**, decoupled from storage.
 
+**What qualifies for registration.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a saved synthesis (<u>Strategy</u> Level 4) when the user opts in. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
+
 It is the one un-pointed-to artifact, so it lives at a **well-known address** agents know a priori. It can be a **single Confluence page** and is treated as **just another DS artifact**, with one tightening: because it's the single entry point everyone hits first, **all writes go through a DL-creation skill's service account** — autonomously for rows it computes, under a verified human assertion for human-created rows; no one edits rows directly. Reads stay open. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
 
 **Start as a page, promote to a DB at scale.** A page suits low-cardinality pointers (dozens to low-hundreds of subjects). When subject count outgrows it, the same schema is **promoted to Postgres (or any indexed DB)** with no change to consumers — they still do one `(entry_type, subject)` lookup. See <u>Storage</u>.
-
-**What qualifies for registration.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a saved synthesis (<u>Strategy</u> Level 4) when the user opts in. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
 
 ### Catalog schema
 
@@ -106,7 +108,7 @@ Durable updates → DSs
 
 All updates propagate/assign ACL metadata and register location in the Catalog.
 
-- **AI skills** — for interpretation-heavy content. A skill reads DS content (respecting ACLs), computes indexes/aggregations/categories, detects content freshness/obsolescence, runs staleness checks on sources *and* its own pointers, writes to a backing store via MCP, registers the Catalog entry, provenance-marks outputs, and rebuilds only content it still owns. **There are many such skills, not one** — each customized to the source it handles.
+**AI skills** do the interpretation-heavy work. A skill reads DS content (respecting ACLs), computes indexes/aggregations/categories, detects content freshness/obsolescence, runs staleness checks on sources *and* its own pointers, writes to a backing store via MCP, registers the Catalog entry, provenance-marks outputs, and rebuilds only content it still owns. **There are many such skills, not one** — each customized to the source it handles.
 
 **Overwrite safety.** Before recomputing any output it owns, the skill checks the target's **version history and overwrites only if the last revision was its own service account**. If a person edited it since, the skill leaves it untouched — that edit transferred ownership, promoting the output to `human-verified`/`human-created` (recoverable only by restoring an earlier version). In non-versioned stores, the same check reads the `provenance`/`row_provenance` columns instead.
 
@@ -120,5 +122,3 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **Confirmations** → non-recomputable data; attributed; start as a Confluence-page table, promote to an integrity-enforcing store at scale.
 - **The Catalog** → DL topology, written by the skill service account only; reads stay open.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
-
-> **Use case — secured project information (courtesy of Ryn Bennett).** Portfolio managers restrict PMR meeting notes, the only place comprehensive per-program risk metrics are discussed; MA PFML now requires Program Manager approval to share sprint metrics. These walls inhibit data democracy. Independently-vetted [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) was created as a workaround.
