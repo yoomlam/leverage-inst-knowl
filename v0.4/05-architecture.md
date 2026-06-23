@@ -4,9 +4,9 @@
 
 ## 1. Purpose
 
-Make institutional knowledge available to AI agents, AI-enabled apps, search platforms, and people — without each tool re-running expensive, repetitive searches across every source system.
+Make institutional knowledge available to AI agents, AI-enabled apps, search platforms, and people — without each tool re-running expensive, repetitive searches across every source system. Re-searching per query raises latency, token cost, missed context, duplicate work, and inconsistent answers, and makes trusted or current information hard to find.
 
-Knowledge stays in the **Data Sources (DSs)**. A low-maintenance **Discovery Layer (DL)** makes discovery, prioritization, and retrieval faster and more reliable.
+Knowledge stays in the **Data Sources (DSs)**. A low-maintenance **Discovery Layer (DL)** — a reusable computed layer plus a single Catalog to discover it — gives tools one known place to start instead of fanning out per query, making discovery, prioritization, and retrieval faster and more reliable. It doesn't replace DSs; it makes them easier to use.
 
 ## 2. Core components
 
@@ -44,6 +44,8 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 It is the one un-pointed-to artifact, so it lives at a **well-known address** agents know a priori. It can be a **single Confluence page** and is treated as **just another DS artifact**, with one tightening: because it's the single entry point everyone hits first, **all writes go through a DL-creation skill's service account** — autonomously for rows it computes, under a verified human assertion for human-created rows; no one edits rows directly. Reads stay open. Consumers treat a **missing or malformed row as a cache miss** — fall back to skill routing or a bounded fan-out rather than erroring.
 
 **Start as a page, promote to a DB at scale.** A page suits low-cardinality pointers (dozens to low-hundreds of subjects). When subject count outgrows it, the same schema is **promoted to Postgres (or any indexed DB)** with no change to consumers — they still do one `(entry_type, subject)` lookup. See <u>Storage</u>.
+
+**What qualifies for registration.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a saved synthesis (<u>Strategy</u> Level 4) when the user opts in. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
 
 ### Catalog schema
 
@@ -120,7 +122,3 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
 
 > **Use case — secured project information (courtesy of Ryn Bennett).** Portfolio managers restrict PMR meeting notes, the only place comprehensive per-program risk metrics are discussed; MA PFML now requires Program Manager approval to share sprint metrics. These walls inhibit data democracy. Independently-vetted [Project Indexes](https://navasage.atlassian.net/wiki/x/A4BGoQ) was created as a workaround.
-
-## 7. Why DL matters
-
-Without DL each tool re-searches many DSs, raising latency, token usage, cost, missed context, duplicate work, inconsistent answers, and difficulty finding trusted/current info. DL is a reusable computed layer + a single Catalog to discover it, so tools have one known place to start instead of fanning out per query. It doesn't replace DSs — it makes them easier to use.
