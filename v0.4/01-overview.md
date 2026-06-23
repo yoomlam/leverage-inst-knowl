@@ -1,6 +1,6 @@
 # Leveraging Institutional Knowledge — Overview
 
-*A plain-language introduction to what we're building and why. The concepts are explained in <u>Concepts</u>; engineers should continue to the <u>Architecture</u> and <u>Strategy</u>.*
+*A plain-language introduction to what we're building and why. The concepts are explained in <u>Concepts</u>; engineers should continue to the <u>Strategy</u> and <u>Architecture</u>.*
 
 ## The problem
 
@@ -48,5 +48,5 @@ Each step ships, we learn from it, and we only spend on the next if the prior on
 
 - **<u>Concepts</u>** — the core concepts in plain language, with analogies.
 - **<u>Examples</u>** — how these map to systems Nava already runs.
-- **<u>Architecture</u>** — the technical design (for engineers).
 - **<u>Strategy</u>** — the phased build plan (for engineers).
+- **<u>Architecture</u>** — the technical design (for engineers).
