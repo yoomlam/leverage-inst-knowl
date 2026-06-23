@@ -6,7 +6,7 @@
 
 - **Build vs. buy.** Glean / GoSearch / SearchUnify / Onyx / PipesHub / SWIRL already ingest these DSs, enforce permissions, and provide AI retrieval. Decide DL's delta (likely cross-source aggregations + confirmation signals) and consider scoping DL to just that. Compare the MVP against the realistic *buy* alternative, not only "no DL."
 - **MVP is a full production build, not a minimum proof.** Front-load a falsification experiment — index 1–2 DSs, build hints, A/B an agent with vs. without DL — before the full build.
-- **Signal-type prioritization.** Partition the signal types into MVP-required / second-iteration / post-validation.
+- **DL output-type prioritization.** Partition the DL output types (summaries, indexes, hints, aggregations, freshness) into MVP-required / second-iteration / post-validation.
 - **AI-skill scope.** The skill bundles ETL + trust/ranking + ACL propagation + store selection + Catalog registration; consider narrowing the MVP scope.
 - **DS selection criteria** are undefined (connector availability, Group support, pilot coverage).
 - **Confirmation loop** needs UI, write path, schema, store, consumer — consider deferring post-MVP.

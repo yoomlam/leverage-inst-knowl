@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Serve operational reporting (BI dashboards) and scale DL's retrieval signals, via the **same MCP interface** as everything else. A secondary deterministic pipeline (DSs → pipeline → warehouse → BI dashboards) serves operational reporting with **no AI**.
+Serve operational reporting (BI dashboards) via the **same MCP interface** as everything else. A secondary deterministic pipeline (DSs → pipeline → warehouse → BI dashboards) serves operational reporting with **no AI**.
 
 ```
 DSs → Deterministic Pipeline → Warehouse → BI Dashboards
@@ -16,7 +16,6 @@ It builds on the same foundations (MCP, SSO, and — once it registers outputs �
 
 - **Deterministic pipelines** handle known, repeatable transforms (dashboard tables, aggregations, metrics, scheduled extracts), typically in a **warehouse**. They assign each output a sharing group (same fail-closed model as [07 §2](07-strategy.md)) and register outputs in the Catalog, like the DL-creation skill.
 - **The warehouse is exposed via MCP like any other DS.** The Catalog points to warehouse tables (`store_kind = warehouse`, `bq://dataset.table`) just as it points to a Confluence page.
-- The warehouse is also **one option for DL's retrieval-signal backing store at scale** — the natural promotion target from [07 §2.5](07-strategy.md), not a requirement.
 
 All updates propagate/assign ACL metadata and register location in the Catalog.
 

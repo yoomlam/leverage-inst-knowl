@@ -4,10 +4,10 @@
 
 Discovery Layer (DL) outputs deliberately live in more than one store, picked by **who consumes the output** and **how much write-time integrity it needs**. Two properties drive every choice:
 
-- **In-place update vs. create-only** — can a re-derivation revise the *same* artifact at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (signals, the Catalog, confirmation tables, re-derived summaries) needs in-place update.
+- **In-place update vs. create-only** — can a re-derivation revise the *same* artifact at a *stable* address, or does it spawn a new file each run? Anything DL refreshes on a schedule (the Catalog, confirmation tables, re-derived summaries) needs in-place update.
 - **Versioned vs. non-versioned** — does the store give attribution, an audit log, and revert *for free*, or must a [governed-writer regime](#governed-writer-controls) supply them?
 
-The three stores below sit at different points on both axes. (A warehouse — e.g., BigQuery — is a fourth option for retrieval signals at scale; see the [strategy's Parallel Track](07-strategy.md).)
+The three stores below sit at different points on both axes.
 
 ---
 
@@ -23,7 +23,7 @@ The default for anything human-readable and for small-scale tables.
 | **Access enforcement** | Page/space restriction to a **Confluence group synced from a Google Group** (Atlassian Access / SCIM). *Prereq: Guard/SCIM group provisioning configured.* |
 | **Governance** | Treated as **"just another DS artifact"** — no separate write-governance regime, because version history is the audit trail and revert is recovery. For a shared single-entry artifact (the Catalog), route every write through the skill service account — human-created rows via a verified assertion, not direct editing. |
 
-**Used for:** summaries & indexes; the Catalog at small scale; retrieval-signal and confirmation **tables at small scale**, before they outgrow a page.
+**Used for:** summaries & indexes; the Catalog at small scale; confirmation **tables at small scale**, before they outgrow a page.
 
 ---
 
@@ -51,13 +51,13 @@ The promotion target when a Confluence-page table outgrows its scale (beyond low
 | **Governance** | A non-versioned store, so its writer runs under the [governed-writer controls](#governed-writer-controls). |
 | **Backup/retention** | Required for the **non-recomputable** data it holds — confirmation signals, plus any human-created Catalog rows a non-versioned store can't revert. Skill-computed signals and Catalog rows recover by re-derivation; human-created/verified *artifacts* aren't stored here — they live in a DS, which backs them up. |
 
-**Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g., `confirm_source`, `upsert_signal`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page.
+**Served through scoped tools, never raw SQL.** The MCP service exposes **intent-named tools** — e.g., `confirm_source`, `register_catalog_entry` — each enforcing its own rules *at write time* (rate-limiting, de-duplication, "reject a confirmation whose citation doesn't resolve"). A generic `run_sql` would hand that enforcement back to the caller and forfeit the reason for moving off a page.
 
 **Two writer modes:**
-- **Service-only** — retrieval signals and Catalog rows, written by the skill's service identity with no user in the loop.
+- **Service-only** — Catalog rows, written by the skill's service identity with no user in the loop.
 - **Service + user assertion** — a write attributed to a verified user (a confirmation's `confirmed_by`, or a Level 4 row's `created_by`); the tool needs the user's token both to attribute the write and to rate-limit per person.
 
-**Used for:** retrieval signals, the Catalog, and confirmation tables at scale; high-stakes ranking; untrusted writers needing hard write-time enforcement.
+**Used for:** the Catalog and confirmation tables at scale; high-stakes ranking; untrusted writers needing hard write-time enforcement.
 
 ---
 

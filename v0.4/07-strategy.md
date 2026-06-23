@@ -80,33 +80,30 @@ DL outputs are produced by a **DL-creation skill** under its **own non-user serv
 ### 2.2 Authorship and durability
 | State | Written by | Durability |
 |---|---|---|
-| `AI-generated` | DL-creation skill | **Recomputable** from the DSs — the default |
+| `ai-generated` | DL-creation skill | **Recomputable** from the DSs — the default |
 | `human-verified` | A reviewer, under their own SSO | **Durable** — revert is the only recovery |
 | `human-created` | A human author directly | **Durable** — revert is the only recovery |
 
-A person reviewing an AI-generated output promotes it to `human-verified`; version history records who. The two durable states are the DL outputs that can't be rebuilt; because they live in a DS, that DS backs them up like any record (revert is still the only recovery). The one non-recomputable output DL stores and backs up itself is the confirmation signal (§3.1).
+A person reviewing an AI-generated output (`ai-generated`) promotes it to `human-verified`; version history records who. The two durable states are the DL outputs that can't be rebuilt; because they live in a DS, that DS backs them up like any record (revert is still the only recovery). The one non-recomputable output DL stores and backs up itself is the confirmation signal (§3.1).
 
 ### 2.3 Access control
 Every output carries one sharing state — a specified Google Group, explicitly unrestricted, or unspecified → default-deny ([05](05-access-control.md)). Enforcement is the store's own native group/role grant; **one sensitivity tier per output**, and the author **names the group in the instructions** (the skill never chooses at runtime). Before writing, the skill asserts the named group is no broader than every input's audience; on failure the output stays default-deny.
 
-### 2.4 Summaries & indexes
-Distilled prose, digests, indexes → written into a DS (such as a Confluence page), updatable in place so each re-derivation revises the same page. Starts `AI-generated`; a reviewer promotes to `human-verified`.
-
-### 2.5 Retrieval signals
-Indexes, prioritized pointers, retrieval hints, content-freshness/obsolescence signals → written into a DS or a **service-fronted table** (for example in BigQuery or Postgres at scale). Updated in place as content freshness changes. A signal store is non-versioned, so its writer runs under [governed-writer controls](06-storage.md#governed-writer-controls); in Postgres it also needs the group → role bridge.
-
-### 2.6 The service-fronted store — one MCP write/read path
-The signal store (§2.5), the confirmation store (§3.1-Confirmations), and a promoted Catalog (Level 3-Catalog) can be implemented as the **same thing** (typically a database), reached through an **MCP service** — the interface agents already use for DSs. For simplicity, treat it as **one component**.
-
-- **Scoped tools, never raw SQL** — intent-named tools (`confirm_source`, `upsert_signal`, `register_catalog_entry`) each enforce their own rules at write time; reads are equally scoped (`lookup_confirmations` by citation, version optional — pinned for staleness gating, omitted to total across versions). The validation lives in the tool; that's the whole reason a store graduates to a database.
-- **Two writer modes** — *service-only* (signals, Catalog rows) and *service + user assertion* (a confirmation carrying the confirming user's verified identity as `confirmed_by`).
-- **What the service owns** — reads resolve the caller's Google Groups into a row-level-security predicate; governed-writer controls on its connection; backup/retention for the confirmation tables (the durable, non-recomputable exception).
-- **Start as one service** fronting all three types, with separate roles/tables per type. Split only if confirmations' write-enforcement later needs isolation the others don't.
+### 2.4 DL outputs — summaries, indexes, hints, freshness
+Distilled prose, digests, indexes, prioritized pointers, retrieval hints, and content-freshness/obsolescence signals → written into a DS (such as a Confluence page) and tagged `discovery-layer`, updatable in place so each re-derivation revises the same page. Starts `ai-generated`; a reviewer promotes to `human-verified`. Freshness and pointer metadata also surface as Catalog columns (`freshness`, `last_validated_at`, `source_refs`), updated in place as content changes.
 
 **Expected limitations.** Two open problems, each solvable independently: **no human trust signal** (DL ranks by what's *derivable* — content freshness, provenance, co-occurrence — but nothing captures whether a person vouched for a cited source as *correct*); **no single entry point** (outputs scatter across stores, so every tool must hard-code topology or fan out — the Level 1 problem one layer up).
 
 ### After Level 2 — two independent extensions
 Level 3-Confirmations and Level 3-Catalog each address one limitation, with no dependency on each other — both require Level 2, neither requires the other. Build in whichever order the gap backlog favors.
+
+### The shared service-fronted store
+One MCP write/read path used by **both** extensions. The confirmation store (§3.1-Confirmations) and a promoted Catalog (Level 3-Catalog) can be implemented as the **same thing** (typically a database), reached through an **MCP service** — the interface agents already use for DSs. For simplicity, treat it as **one component**.
+
+- **Scoped tools, never raw SQL** — intent-named tools (`confirm_source`, `register_catalog_entry`) each enforce their own rules at write time; reads are equally scoped (`lookup_confirmations` by citation, version optional — pinned for staleness gating, omitted to total across versions). The validation lives in the tool; that's the whole reason a store graduates to a database.
+- **Two writer modes** — *service-only* (Catalog rows) and *service + user assertion* (a confirmation carrying the confirming user's verified identity as `confirmed_by`).
+- **What the service owns** — reads resolve the caller's Google Groups into a row-level-security predicate; governed-writer controls on its connection; backup/retention for the confirmation tables (the durable, non-recomputable exception).
+- **Start as one service** fronting both types, with separate roles/tables per type. Split only if confirmations' write-enforcement later needs isolation the Catalog doesn't.
 
 ---
 
@@ -120,10 +117,10 @@ A user confirms that a **DL output** or **DS record** an AI built its response f
 - **Linking a signal to its data.** A confirmation attaches only if the response is traceable via the §1.3 "always cite source links" convention — the citation is the join key. The confirm path **rejects a confirmation whose citation doesn't resolve**. Each signal records the **version of the confirmed data**, so a later edit doesn't silently inherit earned trust.
 - **How a user confirms** — an affordance in the tool (thumbs-up scoped per cited source), conversationally to the agent (which calls an **MCP confirm tool** — agent-native parity with the button), or as a **negative signal** when a user corrects the underlying record (§1.2).
 - **A service account writes the confirmation** — users never get direct write access. The confirming user's verified identity is captured as `confirmed_by`; routing through the service enforces validation, **rate-limiting / de-duplication** (at most one confirmation per user per cited source-version), and a minimum count of distinct confirmers before trust affects ranking.
-- **Store:** can start as a [Confluence-page table](06-storage.md#confluence-pages); **promote** to the [service-fronted Postgres store](06-storage.md#postgres-the-service-fronted-store) (§2.6) when scale / untrusted writers / high-stakes ranking demand hard write-time enforcement. Durable and non-recomputable, so it needs its own backup/retention.
+- **Store:** can start as a [Confluence-page table](06-storage.md#confluence-pages); **promote** to the [service-fronted Postgres store](06-storage.md#postgres-the-service-fronted-store) (the [shared service-fronted store](#the-shared-service-fronted-store)) when scale / untrusted writers / high-stakes ranking demand hard write-time enforcement. Durable and non-recomputable, so it needs its own backup/retention.
 
 ### 3.2 Using confirmation signals at query time
-The §3.1 table is just another §2.5 retrieval signal: a Query skill does a **targeted keyed lookup** on the cited pointer (optionally pinned to a version), fetching only the matching rows and lets accumulated trust shape the response, under the user's SSO. **Trust can also live in the DS itself** (a "verified" page, an accepted ticket, an owner's sign-off) — the skill weighs DS-native and DL trust together. How aggressively, lightest to most invasive:
+The §3.1 table is queried like any other DL lookup: a Query skill does a **targeted keyed lookup** on the cited pointer (optionally pinned to a version), fetching only the matching rows and lets accumulated trust shape the response, under the user's SSO. **Trust can also live in the DS itself** (a "verified" page, an accepted ticket, an owner's sign-off) — the skill weighs DS-native and DL trust together. How aggressively, lightest to most invasive:
 
 - **A. Presentation only** — annotate "confirmed accurate by N people" or "reported inaccurate on <date>." Safest; never hides data.
 - **B. Version-aware** — **staleness gating** (downgrade if the record changed since confirmed) and **recency decay**.
@@ -152,7 +149,7 @@ The Catalog is DL's "yellow pages" (`entry_type + subject → location`), indexi
 
 **Kept honest.** The skill registers each output's location as it runs. Because version history is *corrective, not preventive*, each run also **validates entries / dangling pointers and re-derives the rows it owns** (`row_provenance = 'skill'`); human-created rows rely on revert.
 
-*Hardening:* the Catalog stores **pointers, not permissions** — a tampered row can *misdirect* but never *widen* access (enforcement is the target store's). **Promotion:** when subject count outgrows a page, promote the *same schema* to [Postgres / indexed DB](06-storage.md#postgres-the-service-fronted-store) served by the §2.6 service — consumers still do one lookup; the well-known address is preserved via a stable alias so the backing store can change underneath.
+*Hardening:* the Catalog stores **pointers, not permissions** — a tampered row can *misdirect* but never *widen* access (enforcement is the target store's). **Promotion:** when subject count outgrows a page, promote the *same schema* to [Postgres / indexed DB](06-storage.md#postgres-the-service-fronted-store) served by the [shared service-fronted store](#the-shared-service-fronted-store) — consumers still do one lookup; the well-known address is preserved via a stable alias so the backing store can change underneath.
 
 **Query skills now evolve.** What §1.3 did by hand — a maintained routing table — the Catalog now provides as computed, scalable data. A skill stops hard-coding DS routing and routes through the Catalog when it doesn't already know where the answer lives. A **topic-scoped skill can skip the Catalog** entirely, pointing straight at outputs it already knows; the Catalog is the **fallback** for questions a skill can't place directly. Consulting it is always a **targeted keyed lookup, not a full read** — the skill resolves intent to a key and fetches only the matching row(s), in both the Confluence-page and promoted-DB realizations.
 
@@ -168,7 +165,7 @@ The gap this closes: Level 2's skills must **guess** what to precompute, and Lev
 When the skill synthesizes a cross-DS answer matching no existing DL output, it offers to **create** it — *"Create a Confluence page / Google Doc from this answer?"* The skill detects the trigger (it knows whether it answered from an existing output or had to fan out). The user can save the **whole synthesis or just the good section**. **Opt-in and user-driven** — the user vouches for both the content and the action; no silent writes.
 
 ### 4.2 What gets written, and where
-A **human-created DL output** (§2.2) — a §2.4 summary, born durable. Not a DS record (that's primary knowledge authored for its own sake; this is *derived* material for reuse). Lives in a DS-hosted store (a Confluence page or Google Doc), written under the **user's own SSO** (which §2.2 allows for human-authored outputs), born **`human-created`** — durable, not recomputable, attributed in version history, and backed up by its host DS like any record. Access follows the **DL group-share model** ([05](05-access-control.md)) — one tier, audience no broader than its most-restricted source — *not* §1.2 single-location inheritance, because a cross-source synthesis can blend tiers. Registered in the Catalog (§4.3); from there it behaves like any §2.4 summary.
+A **human-created DL output** (§2.2) — a §2.4 summary, born durable. It lives in a DS-hosted store (a Confluence page or Google Doc), so it's **a DS record for storage** — backed up by that DS like any record — but a DL output by role: *derived* material for reuse, marked `discovery-layer`, never primary knowledge. Written under the **user's own SSO** (which §2.2 allows for human-authored outputs), born **`human-created`** — durable, not recomputable, attributed in version history. Access follows the **DL group-share model** ([05](05-access-control.md)) — one tier, audience no broader than its most-restricted source — *not* §1.2 single-location inheritance, because a cross-source synthesis can blend tiers. Registered in the Catalog (§4.3); from there it behaves like any §2.4 summary.
 
 ### 4.3 Registering in the Catalog
 The artifact is written by the user's agent under their SSO, but the **Catalog row is not** — every Catalog write routes through a DL-creation skill's service account. The same split confirmations use: **the user creates the artifact; a service registers the pointer.** After writing, the skill calls `register_catalog_entry` with the user's verified assertion; the service writes under **its own identity** (preserving the narrow-writer rule) and captures the creating user as `created_by`. The tool enforces at write time: **pointer resolves**, **sensitivity** (declared audience no broader than the artifact's actual ACLs), and **de-dup** (an existing row for the same key is updated in place). The row is marked **human-created**: the validation pass validates the pointer but doesn't recompute the row — revert is its recovery.
