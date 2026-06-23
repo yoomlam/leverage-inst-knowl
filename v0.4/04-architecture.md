@@ -72,6 +72,18 @@ The same columns apply in both realizations (Confluence-page table first, DB tab
 
 **Notes.** No `created_at`/`updated_at`/`updated_by` in the Confluence realization — version history supplies them; add those columns only after promotion. `access_groups` is a hint, not a gate. `source_refs` is load-bearing: dangling-pointer detection and re-derivation both depend on it. `row_provenance`/`computed_by` let the skill re-derive only the rows it owns and leave human-created rows to revert-based recovery.
 
+### Dangling-pointer resilience
+
+A `location` can break: a DS page is deleted, a dataset is dropped, a doc is moved, or a space is reorganized. Then the pointer resolves to nothing. Three layers handle this — detection, recovery, and graceful consumer behavior — and none needs a new always-on service.
+
+**Detection — reconciliation folded into existing runs.** Pointer checking rides on the scheduled skill runs that already maintain the Catalog (§5), not a separate watchdog. Each run, a skill confirms that the `location` of every row it owns still resolves, then stamps `last_validated_at`. `source_refs` makes this cheap: comparing the stored version/etag against the live source catches both a **vanished** target (the pointer fails) and a **drifted** one (the source moved past the version the output was built from). To close the edges per-skill runs miss — rows whose owning skill no longer runs, and human-owned rows nobody re-derives — one **owner-agnostic reconciliation pass** (itself just a skill) periodically reads every row's `location` to confirm it's reachable and updates `freshness` / `last_validated_at`. It only checks reachability; it never rewrites content.
+
+**Recovery — by who owns the row.**
+- **Skill-owned rows (`row_provenance = 'skill'`):** the owning skill re-derives — recompute the output, write it to its (possibly new) location, update the row. If the underlying source is itself gone (not merely moved), the output is no longer derivable, so the row is dropped or marked `obsolete` and consumers stop trusting it.
+- **Human-owned rows (`row_provenance = 'human'`):** can't be recomputed. The reconciliation pass flags the row `obsolete` and surfaces it to its owner; recovery is the same revert-based path as any human-authored output. A human row is never silently deleted.
+
+**Graceful degradation — a broken pointer never errors.** A consumer that follows a pointer to nothing treats it exactly like a missing row: a **cache miss**. It falls back to the Query skill's routing or a bounded fan-out and still returns an answer — a dangling pointer costs that one query some latency, never correctness. This is the point of the Catalog being a cache, not a system of record: the DSs stay the source of truth, so any stale or broken pointer is always recoverable by going to the source.
+
 ## 4. Data flows
 
 ```
