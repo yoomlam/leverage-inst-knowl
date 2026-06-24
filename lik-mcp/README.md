@@ -61,8 +61,10 @@ auto-creates a persistent `likdb_local` — separate from the disposable `likdb_
 docker compose up -d          # Postgres + lik-mcp server on 127.0.0.1:8000
 ```
 
-The server serves the streamable-http transport at `http://127.0.0.1:8000/mcp`, runs with
-`LIK_ENV=local` (stub identity — self-asserted, not real trust), and points at `likdb_local`.
+The server listens over HTTP (the MCP "streamable-http" transport — a long-lived server you
+connect to by URL, rather than one each client launches itself) at `http://127.0.0.1:8000/mcp`.
+It runs with `LIK_ENV=local` (stub identity — self-asserted, not real trust) and points at
+`likdb_local`.
 Verify it's up with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 against that URL, or any MCP client.
 
