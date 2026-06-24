@@ -21,10 +21,17 @@ from .confirmations import (
 from .db import Database
 
 
-def build_server(db: Database, verifier: Verifier, resolver: CitationResolver) -> FastMCP:
+def build_server(
+    db: Database,
+    verifier: Verifier,
+    resolver: CitationResolver,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+) -> FastMCP:
     """Construct the MCP service. Dependencies are injected so tests can substitute a
-    stub verifier / resolver and a test database. The service exposes ONLY the four
-    intent-named tools below — there is no generic SQL tool."""
+    stub verifier / resolver and a test database. host/port apply only to the
+    streamable-http transport. The service exposes ONLY the intent-named tools below —
+    there is no generic SQL tool."""
 
     # The HTTP transport must bind 0.0.0.0 inside a container to be reachable through a
     # published port, so loopback-binding can't be the DNS-rebinding guard. Restrict the
@@ -34,7 +41,7 @@ def build_server(db: Database, verifier: Verifier, resolver: CitationResolver) -
         enable_dns_rebinding_protection=True,
         allowed_hosts=["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"],
     )
-    mcp = FastMCP("lik-mcp", transport_security=transport_security)
+    mcp = FastMCP("lik-mcp", host=host, port=port, transport_security=transport_security)
 
     @mcp.tool(name="register_catalog_entry")
     def _register_catalog_entry(entry: CatalogEntry, token: str | None = None) -> RegisterResult:

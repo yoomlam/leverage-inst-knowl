@@ -19,8 +19,14 @@ class Settings(BaseSettings):
 
     # How the server is exposed. "stdio" (default) is spawned per-session by an MCP
     # client; "streamable-http" runs a long-lived HTTP listener (used by the container).
-    # FastMCP's own host/port/path come from FASTMCP_-prefixed env vars.
     transport: str = "stdio"
+
+    # HTTP listener bind address/port (only used by the streamable-http transport).
+    # FastMCP forwards its own kwarg defaults into its settings, which shadow FASTMCP_*
+    # env vars, so we own these and pass them explicitly. The container sets
+    # LIK_HTTP_HOST=0.0.0.0 to be reachable through its published port.
+    http_host: str = "127.0.0.1"
+    http_port: int = 8000
 
     @property
     def conninfo(self) -> str:

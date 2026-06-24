@@ -11,7 +11,9 @@ def make_server(settings: Settings | None = None):
     # Fail closed unless explicitly in local/test: the stub must never authenticate in a
     # real deployment (incl. a cloud `dev` environment).
     verifier = StubVerifier() if settings.env in {"local", "test"} else FailClosedVerifier()
-    return build_server(db, verifier, ShapeResolver())
+    return build_server(
+        db, verifier, ShapeResolver(), host=settings.http_host, port=settings.http_port
+    )
 
 
 if __name__ == "__main__":
