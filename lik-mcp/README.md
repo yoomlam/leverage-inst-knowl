@@ -63,8 +63,32 @@ Copy `.env.example` to `.env` and edit. Swapping the test DB for the real one is
 credentials change here, not a code change. `LIK_ENV=dev|test` uses a stub identity
 verifier; any other value fails closed (real Google OIDC is a later slice).
 
-## Not yet built (deferred)
+## TODO
 
-Real Google OIDC verification, the Google-Group → Postgres-role RLS bridge,
-governed-writer credential rotation, confirmation backup/retention, rate-limiting
-thresholds, and the producer/Query skills. See the plan's scope boundaries.
+This is a dev/test harness with throwaway data, not a production service. "Full
+serving" — real callers in prod with verified identities and enforced access — is
+not built yet. Until it is:
+
+**Current limits (do not treat these as done):**
+
+- **Prod is inert.** With `LIK_ENV=prod` the fail-closed verifier rejects *every*
+  tool call. The service runs but answers nobody until real OIDC lands.
+- **Identity is not verified.** In `dev`/`test` the stub treats the token as the
+  caller's email, so `confirmed_by` / `updated_by` are effectively self-asserted.
+  Confirmations accumulated this way are not real trust.
+- **No access control.** There is no Group → Postgres-role RLS yet; reads return
+  rows with **no `access_groups` filtering**. Do **not** load real or restricted
+  data into any instance.
+- **Citations aren't really resolved.** `ShapeResolver` only checks well-formedness
+  and a known `store_kind` — it does not confirm the cited source exists/reaches.
+- **No governed-writer security or durability.** Keyless/rotated credentials, audit
+  logging, and confirmation backup/retention are unbuilt.
+
+**Deferred work that lifts the limits (see the plan's scope boundaries):**
+
+- Real Google OIDC token verification (replaces the stub verifier).
+- Google-Group → Postgres-role RLS bridge (enforces `access_groups` on reads).
+- Real per-store citation resolution (behind the existing `CitationResolver` seam).
+- Governed-writer controls: keyless/rotated credentials, least privilege, audit logging.
+- Confirmation backup/retention, plus rate-limiting / minimum-distinct-confirmer thresholds.
+- The producer (DL-creation) and Query skills that call this service.
