@@ -9,6 +9,8 @@ services:
       - "5432:5432"
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # Also create the persistent likdb_local (manual testing) on first volume init.
+      - ./db/init-local.sh:/docker-entrypoint-initdb.d/02-init-local.sh:ro
       # Postgres 18+ images store data in a major-version subdirectory; mount the
       # whole dir, not /var/lib/postgresql/data.
       - likdata:/var/lib/postgresql
@@ -17,6 +19,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  lik-mcp:
+    build: .
+    environment:
+      LIK_ENV: local              # StubVerifier; never use a non-local env here
+      LIK_DB_HOST: db             # reach Postgres over the compose network
+      LIK_DB_NAME: likdb_local    # persistent DB, survives the test suite's TRUNCATE
+      LIK_TRANSPORT: streamable-http
+      LIK_HTTP_HOST: 0.0.0.0      # bind all interfaces inside the container...
+    ports:
+      - "127.0.0.1:8000:8000"     # ...but publish to host loopback only
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   likdata:
