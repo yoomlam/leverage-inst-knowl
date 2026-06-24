@@ -40,11 +40,13 @@ membership in the `*_writer` / `dl_reader` roles per your governed-writer policy
 
 ```sh
 pip install -e ".[dev]"
-pytest
+LIK_ENV=test pytest
 ```
 
-Tests run against the Docker Postgres (or any DB the env points at) and exercise the
-real write-time rules. They skip with a hint if no database is reachable.
+The suite **requires `LIK_ENV=test`** and aborts otherwise — it `TRUNCATE`s the
+tables between tests, so it must point at a disposable database, never the deployed
+one (which runs `LIK_ENV=prod`). It skips with a hint if no database is reachable.
+Point `LIK_DB_*` at a throwaway DB (e.g. the docker compose one).
 
 ## Configuration
 

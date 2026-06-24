@@ -1,4 +1,3 @@
-import os
 import pathlib
 
 import pytest
@@ -12,9 +11,21 @@ from lik_mcp.settings import Settings
 INIT_SQL = pathlib.Path(__file__).resolve().parents[1] / "db" / "init.sql"
 
 
+def pytest_configure(config):
+    """Hard gate: the suite TRUNCATEs catalog/confirmations, so it only runs in an
+    explicit test mode. The deployed DB runs LIK_ENV=prod and can never be hit here."""
+    env = Settings().env
+    if env != "test":
+        raise pytest.UsageError(
+            f"Refusing to run tests with LIK_ENV={env!r} (expected 'test'). "
+            "This suite TRUNCATEs catalog and confirmations, so it must point at a "
+            "disposable database. Run `LIK_ENV=test pytest` against a throwaway DB "
+            "(e.g. the docker compose one) — never the deployed DB."
+        )
+
+
 @pytest.fixture(scope="session")
 def settings():
-    os.environ.setdefault("LIK_ENV", "test")
     return Settings()
 
 
@@ -34,7 +45,8 @@ def db(settings):
 
 
 @pytest.fixture(autouse=True)
-def clean(db):
+def clean(db, settings):
+    assert settings.env == "test"  # defense in depth: never TRUNCATE outside test mode
     with db.connection() as conn:
         conn.execute("TRUNCATE catalog, confirmations RESTART IDENTITY")
         conn.commit()
