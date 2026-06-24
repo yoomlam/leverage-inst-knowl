@@ -15,7 +15,7 @@ source is (`read_confirmations`) and offers to record the user's confirmation (`
 
 ## Prerequisites
 
-- The **lik-mcp** MCP service is connected (pointed at `likdb_dev` for manual testing) and the
+- The **lik-mcp** MCP service is connected (pointed at `likdb_local` for manual testing) and the
   Catalog has been populated by the `sync-catalog-from-project-indexes` skill.
 - The Atlassian (Confluence) MCP tools are available (for reading pages and the Level 3 fallback).
 

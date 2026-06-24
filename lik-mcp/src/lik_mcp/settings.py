@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     db_password: str = "lik"
     db_sslmode: str = "prefer"
 
-    # dev | test -> StubVerifier; anything else -> fail-closed (no real verifier built yet).
-    env: str = "dev"
+    # local | test -> StubVerifier; anything else (incl. a cloud `dev`) -> fail-closed.
+    env: str = "local"
 
     @property
     def conninfo(self) -> str:

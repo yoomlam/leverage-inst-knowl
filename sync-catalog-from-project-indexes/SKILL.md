@@ -17,7 +17,7 @@ run updates rows in place rather than duplicating them.
 ## Prerequisites
 
 - The **lik-mcp** MCP service is connected and pointed at the database you want to populate
-  (for manual testing, `likdb_dev` — see the lik-mcp README "Local dev database").
+  (for manual testing, `likdb_local` — see the lik-mcp README "Local database").
 - The Atlassian (Confluence) MCP tools are available.
 
 ## What to do
@@ -71,7 +71,7 @@ Synced N project-index pages into the Catalog (Postgres).
 - **Idempotent.** The Catalog upserts on `(entry_type, subject)`, so re-running updates rows
   in place. A page renamed in Confluence creates a new `subject` (a new row) rather than
   updating the old one — the stale row ages out via reconciliation, not this skill.
-- **Targets whatever DB lik-mcp points at.** For manual testing that should be `likdb_dev`,
+- **Targets whatever DB lik-mcp points at.** For manual testing that should be `likdb_local`,
   not the disposable `likdb_test`. Confirm the server's `LIK_DB_NAME` before a real run.
 - **Writes only the Catalog.** This skill never edits Confluence pages or any other Data
   Source — it only records where each project-index page lives.

@@ -33,26 +33,27 @@ uv pip install -e ".[dev]"
 docker compose up -d          # starts postgres:18.4 and applies db/init.sql
 ```
 
-## Local dev database (for manual testing)
+## Local database (for manual testing)
 
 The test DB (`likdb_test`) is `TRUNCATE`d between test runs. For manual testing —
 exercising the catalog/query skills against data that should survive `pytest` — use a
-separate, persistent `likdb_dev` in the same container. Create it once:
+separate, persistent `likdb_local` in the same container. Create it once:
 
 ```sh
-docker compose exec db createdb -U lik likdb_dev          # one-time
-LIK_DB_NAME=likdb_dev python scripts/init_db.py           # apply the schema
+docker compose exec db createdb -U lik likdb_local        # one-time
+LIK_DB_NAME=likdb_local python scripts/init_db.py         # apply the schema
 ```
 
 Then run the MCP server against it:
 
 ```sh
-LIK_ENV=dev LIK_DB_NAME=likdb_dev python -m lik_mcp
+LIK_ENV=local LIK_DB_NAME=likdb_local python -m lik_mcp
 ```
 
 `pytest` keeps pointing at `likdb_test`; the `_test`-suffix guard (below) means the
-suite can never truncate `likdb_dev`. Switching the server between the two databases
-is an env change, not a code change.
+suite can never truncate `likdb_local`. Switching the server between the two databases
+is an env change, not a code change. (`LIK_ENV=local` is named to avoid confusion with a
+cloud-deployed `dev` environment, which fails closed.)
 
 ## Initialize a deployed database
 
@@ -81,12 +82,13 @@ skips with a hint if no database is reachable.
 ## Configuration
 
 Copy `.env.example` to `.env` and edit. Swapping the test DB for the real one is a
-credentials change here, not a code change. `LIK_ENV=dev|test` uses a stub identity
-verifier; any other value fails closed (real Google OIDC is a later slice).
+credentials change here, not a code change. `LIK_ENV=local|test` uses a stub identity
+verifier; any other value — including a cloud-deployed `dev` — fails closed (real Google
+OIDC is a later slice).
 
 ## TODO
 
-This is a dev/test harness with throwaway data, not a production service. "Full
+This is a local/test harness with throwaway data, not a production service. "Full
 serving" — real callers in prod with verified identities and enforced access — is
 not built yet. Until it is:
 
@@ -94,7 +96,7 @@ not built yet. Until it is:
 
 - **Prod is inert.** With `LIK_ENV=prod` the fail-closed verifier rejects *every*
   tool call. The service runs but answers nobody until real OIDC lands.
-- **Identity is not verified.** In `dev`/`test` the stub treats the token as the
+- **Identity is not verified.** In `local`/`test` the stub treats the token as the
   caller's email, so `confirmed_by` / `updated_by` are effectively self-asserted.
   Confirmations accumulated this way are not real trust.
 - **No access control.** There is no Group → Postgres-role RLS yet; reads return

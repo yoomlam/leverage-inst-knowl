@@ -15,7 +15,7 @@ class Verifier(Protocol):
 
 
 class StubVerifier:
-    """Test/dev only. Treats the token as the caller's email and never validates it.
+    """Test/local only. Treats the token as the caller's email and never validates it.
     The real GoogleOIDCVerifier is a later, drop-in implementation with the same
     interface, so tool signatures don't change when it lands."""
 
@@ -28,10 +28,10 @@ class StubVerifier:
 
 
 class FailClosedVerifier:
-    """Default outside dev/test: refuse everything. Prevents the stub from silently
+    """Default outside local/test: refuse everything. Prevents the stub from silently
     authenticating callers in a real deployment before OIDC exists."""
 
     def verify(self, token: str | None) -> Identity:
         raise PermissionError(
-            "No real verifier configured (LIK_ENV is not dev/test). Refusing to authenticate."
+            "No real verifier configured (LIK_ENV is not local/test). Refusing to authenticate."
         )

@@ -8,8 +8,9 @@ from .settings import Settings
 def make_server():
     settings = Settings()
     db = Database(settings.conninfo)
-    # Fail closed unless explicitly in dev/test: the stub must never authenticate in prod.
-    verifier = StubVerifier() if settings.env in {"dev", "test"} else FailClosedVerifier()
+    # Fail closed unless explicitly in local/test: the stub must never authenticate in a
+    # real deployment (incl. a cloud `dev` environment).
+    verifier = StubVerifier() if settings.env in {"local", "test"} else FailClosedVerifier()
     return build_server(db, verifier, ShapeResolver())
 
 

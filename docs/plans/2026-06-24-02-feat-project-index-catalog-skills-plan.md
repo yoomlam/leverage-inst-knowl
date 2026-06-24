@@ -10,7 +10,7 @@ origin: docs/brainstorms/2026-06-24-02-project-index-catalog-skills-requirements
 
 ## Summary
 
-Stand up the two agent skills the lik-mcp README lists as deferred — a DL-creation skill that crawls Confluence `project-index` pages and registers one Catalog row each in Postgres, and a Query skill that answers questions from the Catalog with a user-gated escalation (lookup → list → Confluence) and exercises the confirmations flow. One supporting code change (`list_catalog_entries` MCP tool) and one ops step (a persistent `likdb_dev`) make the round-trip manually testable end to end.
+Stand up the two agent skills the lik-mcp README lists as deferred — a DL-creation skill that crawls Confluence `project-index` pages and registers one Catalog row each in Postgres, and a Query skill that answers questions from the Catalog with a user-gated escalation (lookup → list → Confluence) and exercises the confirmations flow. One supporting code change (`list_catalog_entries` MCP tool) and one ops step (a persistent `likdb_local`) make the round-trip manually testable end to end.
 
 ---
 
@@ -27,7 +27,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 - R3. `query-project-index` runs the three-level escalation in order, requiring explicit user confirmation before Level 1→2 and before 2→3.
 - R4. The query skill ranks cited sources by `read_confirmations` count and offers `confirm_source` after answering; citation `version` is sourced consistently within a run.
 - R5. New intent-named MCP tool `list_catalog_entries(entry_type)`: returns all rows for one `entry_type`, no free-form predicate, miss returns empty list, reads stay open.
-- R6. A persistent `likdb_dev` holds the synced catalog and survives `pytest` (which truncates `likdb_test`); switching the server between the two is env-only.
+- R6. A persistent `likdb_local` holds the synced catalog and survives `pytest` (which truncates `likdb_test`); switching the server between the two is env-only.
 - R7. Both skills are self-contained `SKILL.md` files at repo root; the query skill does not use Confluence live-instructions indirection.
 - R8. A Catalog miss or dangling pointer never errors — it degrades to the next level / a bounded fan-out.
 - R9. `read_confirmations` returns confirmations across **all versions** of a cited source (matched on `store_kind` + `location` + `locator`), each row carrying its own `version`, so the consumer can use the latest version's trust or weigh prior-version trust. `confirm_source` is unchanged — it still records and dedups per exact source-version. **Redefines origin AE4** (which asserted version-bound counting at the service); that capability is preserved as a client-side filter on the returned rows.
@@ -43,7 +43,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 - Confirmation backup/retention, rate-limiting, minimum-distinct-confirmer thresholds.
 - Scheduled runs, dangling-pointer reconciliation, freshness re-derivation.
 - Any change to the Catalog write rules, `confirm_source`'s per-version dedup, or the remaining three MCP tools. (`read_confirmations` read semantics *are* in scope — see U5/R9.)
-- Automatic provisioning of `likdb_dev` inside the Docker entrypoint (entrypoint init scripts only run on a fresh volume) — provisioning is a documented one-time manual step instead.
+- Automatic provisioning of `likdb_local` inside the Docker entrypoint (entrypoint init scripts only run on a fresh volume) — provisioning is a documented one-time manual step instead.
 
 ---
 
@@ -57,7 +57,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 - [lik-mcp/tests/test_catalog.py](../../lik-mcp/tests/test_catalog.py) — the `_entry(**overrides)` + `db` fixture test style to mirror for the new tool's test.
 - [lik-mcp/tests/test_surface.py](../../lik-mcp/tests/test_surface.py) — asserts the **exact** tool set; must move from four to five and keep the "no raw-SQL" intent in its docstring.
 - [lik-mcp/scripts/init_db.py](../../lik-mcp/scripts/init_db.py) — schema-only initializer keyed off `LIK_DB_NAME`; applies to an existing DB, does not create one.
-- [lik-mcp/src/lik_mcp/__main__.py](../../lik-mcp/src/lik_mcp/__main__.py) / [settings.py](../../lik-mcp/src/lik_mcp/settings.py) / [auth.py](../../lik-mcp/src/lik_mcp/auth.py) — server launch; `LIK_ENV=dev/test`→`StubVerifier` (token treated as caller email); DB selected by `LIK_DB_NAME`.
+- [lik-mcp/src/lik_mcp/__main__.py](../../lik-mcp/src/lik_mcp/__main__.py) / [settings.py](../../lik-mcp/src/lik_mcp/settings.py) / [auth.py](../../lik-mcp/src/lik_mcp/auth.py) — server launch; `LIK_ENV=local/test`→`StubVerifier` (token treated as caller email); DB selected by `LIK_DB_NAME`.
 - [discovery-catalog-sync/SKILL.md](../../discovery-catalog-sync/SKILL.md) — the CQL crawl + one-row-per-page model to mirror for the sync skill.
 - [dl-project-index-query/SKILL.md](../../dl-project-index-query/SKILL.md) — the live-instructions pattern the query skill deliberately does **not** copy; frontmatter/trigger style to reuse.
 
@@ -76,8 +76,8 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 - **`list_catalog_entries` stays intent-named, bounded by `entry_type`.** It does not reintroduce a generic query tool — it filters on a discovery key and returns whole rows, no caller-supplied predicate. The tool count moving 4→5 is a deliberate, scoped exception to AE6's literal "four tools," not a relaxation of the "no raw-SQL escape hatch" rule. (see origin: K2)
 - **`entry_type = "index"`** for project-index pages — the literal v0.4 enum match, distinct from the `project-summary` rows used in existing tests. (see origin: K3)
 - **Cross-version reads, per-version writes.** `read_confirmations` aggregates across all versions of a source so a query never silently sees count=0 just because the page was edited since it was confirmed (this is what makes the K5 concern from origin tractable). `confirm_source` still writes per exact version — a confirmation is a statement about the version someone actually saw. The Query skill uses the live page `version` to label which returned confirmations are "current" vs "prior," and weighs accordingly. (see origin: K5; supersedes the earlier same-version-only approach)
-- **`confirm_source` passes the user's email as the token** so `confirmed_by` is the real confirmer, not the default `service@navapbc.com` — the StubVerifier treats the token as the caller email in dev/test.
-- **`likdb_dev` provisioned manually, once.** `createdb likdb_dev` then `init_db.py` against it; documented in the README rather than wired into docker-compose, because entrypoint init scripts only fire on a fresh volume. The existing `_test`-suffix gate guarantees the suite can never truncate `likdb_dev`. (see origin: R12)
+- **`confirm_source` passes the user's email as the token** so `confirmed_by` is the real confirmer, not the default `service@navapbc.com` — the StubVerifier treats the token as the caller email in local/test.
+- **`likdb_local` provisioned manually, once.** `createdb likdb_local` then `init_db.py` against it; documented in the README rather than wired into docker-compose, because entrypoint init scripts only fire on a fresh volume. The existing `_test`-suffix gate guarantees the suite can never truncate `likdb_local`. (see origin: R12)
 
 ---
 
@@ -86,7 +86,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 ### Resolved During Planning
 
 - How should the query skill enumerate when no single project is named? — Three-level user-gated escalation; Level 2 uses the new `list_catalog_entries`. (origin K1)
-- Where does the synced catalog live so it survives tests? — A persistent `likdb_dev`, separate from disposable `likdb_test`. (origin R12)
+- Where does the synced catalog live so it survives tests? — A persistent `likdb_local`, separate from disposable `likdb_test`. (origin R12)
 
 ### Deferred to Implementation
 
@@ -97,21 +97,21 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 
 ## Implementation Units
 
-- U1. **Provision a persistent `likdb_dev`**
+- U1. **Provision a persistent `likdb_local`**
 
-**Goal:** A durable local dev database holding the synced catalog, separate from the disposable test DB, with the setup documented so it's reproducible.
+**Goal:** A durable local database holding the synced catalog, separate from the disposable test DB, with the setup documented so it's reproducible.
 
 **Requirements:** R6
 
 **Dependencies:** None
 
 **Files:**
-- Modify: `lik-mcp/README.md` (add a "Local dev database" subsection: `docker compose exec db createdb -U lik likdb_dev`, then `LIK_DB_NAME=likdb_dev uv run python scripts/init_db.py`; note the manual MCP server runs `LIK_ENV=dev LIK_DB_NAME=likdb_dev`).
-- Modify: `lik-mcp/.env.example` (document `likdb_dev` as the manual-testing target alongside the existing `likdb_test` note).
+- Modify: `lik-mcp/README.md` (add a "Local database" subsection: `docker compose exec db createdb -U lik likdb_local`, then `LIK_DB_NAME=likdb_local uv run python scripts/init_db.py`; note the manual MCP server runs `LIK_ENV=local LIK_DB_NAME=likdb_local`).
+- Modify: `lik-mcp/.env.example` (document `likdb_local` as the manual-testing target alongside the existing `likdb_test` note).
 
 **Approach:**
 - Reuse `scripts/init_db.py` unchanged — it already targets whatever `LIK_DB_NAME` resolves to and only creates schema. The only new artifact is the `createdb` step plus docs.
-- Make clear in the README that pytest stays pointed at `likdb_test` and the manual MCP server at `likdb_dev`; switching is env-only, no code change.
+- Make clear in the README that pytest stays pointed at `likdb_test` and the manual MCP server at `likdb_local`; switching is env-only, no code change.
 
 **Patterns to follow:**
 - The existing README "Initialize a deployed database" section already shows the `LIK_DB_*` override idiom — extend it, don't reinvent.
@@ -120,8 +120,8 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 - Test expectation: none — ops/docs only; verified by the manual smoke check in Verification.
 
 **Verification:**
-- `docker compose exec db createdb -U lik likdb_dev` succeeds; `LIK_DB_NAME=likdb_dev uv run python scripts/init_db.py` prints both `catalog` and `confirmations` as public tables.
-- `uv run pytest` still runs against `likdb_test` and leaves `likdb_dev` untouched.
+- `docker compose exec db createdb -U lik likdb_local` succeeds; `LIK_DB_NAME=likdb_local uv run python scripts/init_db.py` prints both `catalog` and `confirmations` as public tables.
+- `uv run pytest` still runs against `likdb_test` and leaves `likdb_local` untouched.
 
 ---
 
@@ -179,7 +179,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 - Step 1 — `searchConfluenceUsingCql` with `cql: label = "project-index" AND type = page`, limit 250; collect `title`, `webUrl`, `space.name`, `summary`, `version`/`lastModified`, page ID, `author`.
 - Step 2 — per page, build the `CatalogEntry`: `entry_type="index"`, `subject="project: <title>"`, `location=webUrl`, `store_kind="confluence"`, `locator=<pageId>`, `source_refs=[{id:<pageId>, version:<version>}]`, `category`/`access_groups` left default, `computed_by="sync-catalog-from-project-indexes"`, `row_provenance="skill"`; call `register_catalog_entry(entry)`.
 - Step 3 — tally `RegisterResult.status` (`inserted` vs `updated`) and report `N pages seen, X inserted, Y updated`.
-- Notes — idempotent upsert on the key (re-runs update in place); run on demand only; writes to whatever DB the MCP server points at (`likdb_dev` for manual testing); the CQL is the canonical source of truth.
+- Notes — idempotent upsert on the key (re-runs update in place); run on demand only; writes to whatever DB the MCP server points at (`likdb_local` for manual testing); the CQL is the canonical source of truth.
 
 **Patterns to follow:**
 - `discovery-catalog-sync/SKILL.md` Steps 1 & 5 (CQL, summary block); `CatalogEntry` field names from catalog.py.
@@ -188,7 +188,7 @@ lik-mcp is built and tested, but nothing calls it the way a real producer or con
 - Test expectation: none — natural-language skill procedure with no automated harness; its purpose is manual testing. Verified by the end-to-end run below.
 
 **Verification:**
-- Running the skill against `likdb_dev` populates one `index` row per project-index page; a second run reports rows as `updated`, not duplicated (`SELECT count(*)` stable).
+- Running the skill against `likdb_local` populates one `index` row per project-index page; a second run reports rows as `updated`, not duplicated (`SELECT count(*)` stable).
 - Spot-check a row via `lookup_catalog_entry("index", "project: <known title>")` returns the expected `location`/`locator`.
 
 ---
