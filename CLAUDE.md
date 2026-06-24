@@ -9,6 +9,7 @@
 * As code is being written ensure it aligns with the goals and intent of those docs.
 * Run `eval mise list` to initialize the Python 3.14 environment
 * Use `uv`
+    - To activate the Python virtual environment, `source .venv/bin/activate`
     - For arbitrary Python on the CLI, run `uv run python <args>` (never `python` / `python3`).
     - To run `pytest`, use `uv run pytest`.
     - To install Python dependencies, use `uv pip install`.
