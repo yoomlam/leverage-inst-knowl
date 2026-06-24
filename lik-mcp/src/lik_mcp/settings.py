@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +21,10 @@ class Settings(BaseSettings):
 
     # How the server is exposed. "stdio" (default) is spawned per-session by an MCP
     # client; "streamable-http" runs a long-lived HTTP listener (used by the container).
-    transport: str = "stdio"
+    # A Literal so a bad LIK_TRANSPORT fails at settings load, not deep inside FastMCP.
+    # (env stays a bare str on purpose: any value other than local/test must be accepted
+    # and fail closed — a Literal there would reject cloud envs like "dev" outright.)
+    transport: Literal["stdio", "streamable-http"] = "stdio"
 
     # HTTP listener bind address/port (only used by the streamable-http transport).
     # FastMCP forwards its own kwarg defaults into its settings, which shadow FASTMCP_*

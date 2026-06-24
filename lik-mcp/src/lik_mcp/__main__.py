@@ -1,3 +1,5 @@
+from mcp.server.fastmcp import FastMCP
+
 from .auth import FailClosedVerifier, StubVerifier
 from .citations import ShapeResolver
 from .db import Database
@@ -5,7 +7,7 @@ from .server import build_server
 from .settings import Settings
 
 
-def make_server(settings: Settings | None = None):
+def make_server(settings: Settings | None = None) -> FastMCP:
     settings = settings or Settings()
     db = Database(settings.conninfo)
     # Fail closed unless explicitly in local/test: the stub must never authenticate in a

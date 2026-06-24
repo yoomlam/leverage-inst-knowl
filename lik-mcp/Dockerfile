@@ -11,8 +11,11 @@ RUN pip install --no-cache-dir .
 ENV LIK_TRANSPORT=streamable-http
 ENV LIK_HTTP_HOST=0.0.0.0
 
-# LIK_ENV is intentionally NOT baked in: the same image serves local testing
-# (LIK_ENV=local, supplied by docker compose) and a future deploy (LIK_ENV=prod,
-# which fails closed until real OIDC lands). Transport comes from env, not the command.
+# Default to the fail-closed env so an unconfigured run of this image rejects every
+# call (real Google OIDC isn't built yet — see auth.py). docker compose overrides this
+# to LIK_ENV=local for testing; a deploy keeps prod until OIDC lands. One image, env
+# supplied at run time.
+ENV LIK_ENV=prod
+
 EXPOSE 8000
 CMD ["python", "-m", "lik_mcp"]

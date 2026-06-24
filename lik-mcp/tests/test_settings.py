@@ -22,3 +22,21 @@ def test_transport_env_is_case_insensitive(monkeypatch):
     monkeypatch.delenv("LIK_TRANSPORT", raising=False)
     monkeypatch.setenv("lik_transport", "streamable-http")
     assert Settings(_env_file=None).transport == "streamable-http"
+
+
+def test_http_host_port_defaults(monkeypatch):
+    """Default to loopback:8000 — the no-Docker default. The container overrides
+    LIK_HTTP_HOST to 0.0.0.0 to be reachable through its published port."""
+    monkeypatch.delenv("LIK_HTTP_HOST", raising=False)
+    monkeypatch.delenv("LIK_HTTP_PORT", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.http_host == "127.0.0.1"
+    assert settings.http_port == 8000
+
+
+def test_http_host_port_read_from_env(monkeypatch):
+    monkeypatch.setenv("LIK_HTTP_HOST", "0.0.0.0")
+    monkeypatch.setenv("LIK_HTTP_PORT", "9999")
+    settings = Settings(_env_file=None)
+    assert settings.http_host == "0.0.0.0"
+    assert settings.http_port == 9999
