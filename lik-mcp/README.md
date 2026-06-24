@@ -137,6 +137,10 @@ every Confluence page tagged `project-index` and upserts one Catalog row per pag
 to whatever DB lik-mcp points at, so confirm the server is on `likdb_local` (not `likdb_test`)
 first. Expect a summary like `Synced N project-index pages … X inserted, Y updated`.
 
+> **Tip:** To limit a run for testing, tell the skill how many pages to process when you
+> invoke it — e.g. `sync-catalog-from-project-indexes` *"only process the latest 5
+> project-index pages"*. Re-running later picks up the rest.
+
 ### Query the Catalog
 
 With rows in place, run the **`query-project-index`** skill and pass a project question (e.g.
