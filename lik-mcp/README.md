@@ -36,8 +36,11 @@ is a later slice). Swapping databases is a credentials change here, never code.
 ## Run the test database
 
 ```sh
-docker compose up -d          # postgres:18.4, applies db/init.sql
+docker compose up -d db       # just Postgres (postgres:18.4, applies db/init.sql)
 ```
+
+(`docker compose up -d` with no service also starts the MCP server — see "Local
+database and server" below. For the test suite you only need `db`.)
 
 ## Test
 
@@ -48,51 +51,63 @@ uv run pytest
 The suite `TRUNCATE`s the tables, so it **refuses to run unless `LIK_DB_NAME` ends in
 `_test`** — a deployed DB like `likdb` can never be hit. It skips if no database is reachable.
 
-## Local database (for manual testing)
+## Local database and server (for manual testing)
 
-Manual testing needs data that survives the `TRUNCATE` above, so use a separate, persistent
-`likdb_local` (the `_test` guard keeps the suite from touching it). Create it once, then
-point the server at it:
+`docker compose up` starts Postgres **and** the lik-mcp HTTP server, and on the first run
+auto-creates a persistent `likdb_local` — separate from the disposable `likdb_test` the suite
+`TRUNCATE`s, so your manual-testing data survives:
+
+```sh
+docker compose up -d          # Postgres + lik-mcp server on 127.0.0.1:8000
+```
+
+The server serves the streamable-http transport at `http://127.0.0.1:8000/mcp`, runs with
+`LIK_ENV=local` (stub identity — self-asserted, not real trust), and points at `likdb_local`.
+Verify it's up with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+against that URL, or any MCP client.
+
+If your data volume predates this and `likdb_local` is missing, create it once by hand:
 
 ```sh
 docker compose exec db createdb -U lik likdb_local
 LIK_DB_NAME=likdb_local uv run python scripts/init_db.py   # apply schema
-LIK_ENV=local LIK_DB_NAME=likdb_local uv run python -m lik_mcp   # foreground boot check
 ```
-
-That last line runs the server on stdio in the foreground — useful to confirm it boots, but
-an agent spawns its own copy. The skills below drive the service through an agent (Claude
-Code), so connect it there instead of running it by hand.
 
 ### Connect the service to your agent
 
-Register lik-mcp as an MCP server, pinned to `likdb_local`.
-
-**Claude CLI** — from the `lik-mcp` folder:
-
-```sh
-claude mcp add lik-mcp -- \
-  env LIK_ENV=local LIK_DB_NAME=likdb_local uv run python -m lik_mcp
-```
-
-**Claude Desktop** — it doesn't inherit your shell or working directory, so use absolute
-paths. Edit `claude_desktop_config.json` (Settings → Developer → Edit Config; on macOS it's
-`~/Library/Application Support/Claude/claude_desktop_config.json`) and add:
+**Claude Desktop** — Desktop's custom connectors **can't reach `localhost`**: it hands the
+connector URL to Anthropic's cloud, which opens the connection from its own servers, so a
+`http://127.0.0.1:8000/mcp` connector silently fails. Use the `mcp-remote` stdio→HTTP bridge in
+`claude_desktop_config.json` instead (Settings → Developer → Edit Config; on macOS it's
+`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "lik-mcp": {
-      "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/ik-arch/lik-mcp", "python", "-m", "lik_mcp"],
-      "env": { "LIK_ENV": "local", "LIK_DB_NAME": "likdb_local" }
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:8000/mcp"]
     }
   }
 }
 ```
 
-Use the absolute path to your checkout, and if `uv` isn't on Desktop's `PATH`, give its full
-path (`which uv`) as `command`. Restart Claude Desktop to load the server.
+This needs Node/`npx`. Restart Claude Desktop to load it. (Do **not** add the raw URL as a
+custom connector — that's the path that can't reach localhost.)
+
+**Claude CLI** — the CLI connects from your machine, so the URL works directly:
+
+```sh
+claude mcp add --transport http lik-mcp http://127.0.0.1:8000/mcp
+```
+
+**No-Docker alternative (stdio)** — skip the container and let the client spawn the server over
+stdio, pinned to `likdb_local` (run from the `lik-mcp` folder):
+
+```sh
+claude mcp add lik-mcp -- \
+  env LIK_ENV=local LIK_DB_NAME=likdb_local uv run python -m lik_mcp
+```
 
 The skills also call the Atlassian (Confluence) MCP tools, so connect that server too. The
 lik-mcp tools (`register_catalog_entry`, `lookup_catalog_entry`, `list_catalog_entries`,
@@ -117,8 +132,8 @@ to whatever email you pass as the token — fine for testing, not real trust.
 
 ## Initialize a deployed database
 
-The Docker entrypoint only initializes the local test DB. For any other database, apply
-the (idempotent) schema with the service's own config:
+The Docker entrypoint only initializes the local `likdb_test` and `likdb_local` databases.
+For any other database, apply the (idempotent) schema with the service's own config:
 
 ```sh
 uv run python scripts/init_db.py                           # uses .env / env vars
