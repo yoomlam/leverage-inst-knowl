@@ -1,3 +1,5 @@
+import logging
+
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -19,6 +21,11 @@ from .confirmations import (
     read_confirmations,
 )
 from .db import Database
+
+# One named logger for the service. Tool calls log at INFO; authorization denials and
+# tool failures log at WARNING. The auth token is a credential and is NEVER logged —
+# only the verified caller email that the token resolves to.
+logger = logging.getLogger("lik_mcp.server")
 
 
 def build_server(
@@ -43,36 +50,76 @@ def build_server(
     )
     mcp = FastMCP("lik-mcp", host=host, port=port, transport_security=transport_security)
 
+    def _authorize(tool: str, token: str | None):
+        """Verify the caller and log the outcome. Logs the resolved caller email on
+        success and the reason on denial — never the token itself."""
+        try:
+            identity = verifier.verify(token)
+        except Exception as exc:
+            logger.warning("tool=%s authorization denied: %s", tool, exc)
+            raise
+        logger.info("tool=%s authorized caller=%s", tool, identity.email)
+        return identity
+
     @mcp.tool(name="register_catalog_entry")
     def _register_catalog_entry(entry: CatalogEntry, token: str | None = None) -> RegisterResult:
         """Register or update a Catalog row, keyed on (entry_type, subject). Service-only writer."""
-        identity = verifier.verify(token)
-        return register_catalog_entry(db, entry, updated_by=identity.email)
+        logger.info(
+            "tool=register_catalog_entry request entry_type=%r subject=%r store_kind=%r computed_by=%r",
+            entry.entry_type, entry.subject, entry.store_kind, entry.computed_by,
+        )
+        identity = _authorize("register_catalog_entry", token)
+        result = register_catalog_entry(db, entry, updated_by=identity.email)
+        logger.info(
+            "tool=register_catalog_entry result status=%s entry_type=%r subject=%r",
+            result.status, result.entry_type, result.subject,
+        )
+        return result
 
     @mcp.tool(name="lookup_catalog_entry")
     def _lookup_catalog_entry(entry_type: str, subject: str, token: str | None = None) -> LookupResult:
         """Resolve (entry_type, subject) -> location in one exact-match lookup. Miss = not found."""
-        verifier.verify(token)
-        return lookup_catalog_entry(db, entry_type, subject)
+        logger.info(
+            "tool=lookup_catalog_entry request entry_type=%r subject=%r", entry_type, subject
+        )
+        _authorize("lookup_catalog_entry", token)
+        result = lookup_catalog_entry(db, entry_type, subject)
+        logger.info("tool=lookup_catalog_entry result found=%s", result.found)
+        return result
 
     @mcp.tool(name="list_catalog_entries")
     def _list_catalog_entries(entry_type: str, token: str | None = None) -> ListResult:
         """List every Catalog row of one entry_type (e.g. 'index'). Bounded by the
         discovery key — not a generic query. Empty type = empty list, never an error."""
-        verifier.verify(token)
-        return list_catalog_entries(db, entry_type)
+        logger.info("tool=list_catalog_entries request entry_type=%r", entry_type)
+        _authorize("list_catalog_entries", token)
+        result = list_catalog_entries(db, entry_type)
+        logger.info("tool=list_catalog_entries result count=%d", result.count)
+        return result
 
     @mcp.tool(name="confirm_source")
     def _confirm_source(citation: Citation, token: str | None = None) -> ConfirmResult:
         """Record a user's confirmation that a cited source was right. The confirming
         identity comes from the verified token (never self-asserted)."""
-        identity = verifier.verify(token)
-        return confirm_source(db, citation, identity.email, resolver)
+        logger.info(
+            "tool=confirm_source request store_kind=%r location=%r locator=%r version=%r",
+            citation.store_kind, citation.location, citation.locator, citation.version,
+        )
+        identity = _authorize("confirm_source", token)
+        result = confirm_source(db, citation, identity.email, resolver)
+        logger.info("tool=confirm_source result %s", result.model_dump())
+        return result
 
     @mcp.tool(name="read_confirmations")
     def _read_confirmations(citation: Citation, token: str | None = None) -> ConfirmationsResult:
         """Return accumulated confirmations for one cited source-version."""
-        verifier.verify(token)
-        return read_confirmations(db, citation)
+        logger.info(
+            "tool=read_confirmations request store_kind=%r location=%r locator=%r version=%r",
+            citation.store_kind, citation.location, citation.locator, citation.version,
+        )
+        _authorize("read_confirmations", token)
+        result = read_confirmations(db, citation)
+        logger.info("tool=read_confirmations result count=%d", result.count)
+        return result
 
     return mcp

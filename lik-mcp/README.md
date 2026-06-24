@@ -111,6 +111,10 @@ connector URL to Anthropic's cloud, which opens the connection from its own serv
 This needs Node/`npx`. Restart Claude Desktop to load it. (Do **not** add the raw URL as a
 custom connector — that's the path that can't reach localhost.)
 
+To get the skills (`sync-catalog-from-project-indexes`, `query-project-index`) loaded
+automatically, run **Claude Code** against the `ik-arch` folder from within Claude Desktop.
+**Claude Cowork** does **not** load the skills.
+
 **Claude CLI** — the CLI connects from your machine, so the URL works directly:
 
 ```sh
