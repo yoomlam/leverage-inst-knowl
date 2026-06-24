@@ -33,20 +33,17 @@ Copy `.env.example` to `.env` and edit. `LIK_ENV=local|test` uses a stub identit
 verifier; any other value — including cloud `dev`/`prod` — fails closed (real Google OIDC
 is a later slice). Swapping databases is a credentials change here, never code.
 
-## Run the test database
+## Test
+
+Start just Postgres (the test suite doesn't need the server), then run the suite:
 
 ```sh
 docker compose up -d db       # just Postgres (postgres:18.4, applies db/init.sql)
-```
-
-(`docker compose up -d` with no service also starts the MCP server — see "Local
-database and server" below. For the test suite you only need `db`.)
-
-## Test
-
-```sh
 uv run pytest
 ```
+
+(`docker compose up -d` with no service also starts the MCP server — see "Local database
+and server" below. For the suite you only need `db`.)
 
 The suite `TRUNCATE`s the tables, so it **refuses to run unless `LIK_DB_NAME` ends in
 `_test`** — a deployed DB like `likdb` can never be hit. It skips if no database is reachable.
@@ -73,6 +70,23 @@ If your data volume predates this and `likdb_local` is missing, create it once b
 ```sh
 docker compose exec db createdb -U lik likdb_local
 LIK_DB_NAME=likdb_local uv run python scripts/init_db.py   # apply schema
+```
+
+### Clear the local data
+
+To start manual testing from a clean slate, empty the tables but keep the schema:
+
+```sh
+docker compose exec db psql -U lik -d likdb_local -c "TRUNCATE catalog, confirmations RESTART IDENTITY"
+```
+
+This is the same reset the test suite does to `likdb_test`. To instead drop everything
+(both databases) and re-create from scratch, remove the volume — destructive, and you'll
+re-run the first-volume init:
+
+```sh
+docker compose down -v        # deletes the Postgres volume: likdb_local AND likdb_test
+docker compose up -d          # re-creates both with fresh schema
 ```
 
 ### Connect the service to your agent
