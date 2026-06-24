@@ -6,8 +6,9 @@
 ## Coding
 
 * The software is being implemented based on the docs in the `v0.4` folder.
-* As code is being written ensure it aligns with the goals and intent of those docs.
-* Run `eval mise list` to initialize the Python 3.14 environment
+    - As code is being written ensure it aligns with the goals and intent of those docs.
+* Run `eval mise list` to initialize the uv and python 3.14 environment.
+* The code is under the `lik-mcp` folder, so `cd lik-mcp` before running coding tools.
 * Use `uv`
     - To activate the Python virtual environment, `source .venv/bin/activate`
     - For arbitrary Python on the CLI, run `uv run python <args>` (never `python` / `python3`).
