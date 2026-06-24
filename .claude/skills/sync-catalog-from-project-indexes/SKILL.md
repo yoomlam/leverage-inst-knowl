@@ -53,7 +53,7 @@ For each page, call `register_catalog_entry` (the lik-mcp tool) with an `entry` 
 - `row_provenance`: `"skill"`
 
 Leave the other fields at their defaults (`provenance=ai-generated`, `verification=unverified`,
-`freshness=current`, `sensitivity=restricted`, empty `access_groups`). Each call returns a
+`freshness=current`, `sensitivity=cleared`, empty `access_groups`). Each call returns a
 status of `inserted` or `updated` — tally these for the summary.
 
 ### Step 3 — Summary
