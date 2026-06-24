@@ -1,7 +1,7 @@
 ---
 title: "feat: Dockerized HTTP MCP server for Claude Desktop testing"
 type: feat
-status: active
+status: completed
 date: 2026-06-24
 origin: docs/brainstorms/2026-06-24-03-dockerized-mcp-server-for-desktop-requirements.md
 ---
