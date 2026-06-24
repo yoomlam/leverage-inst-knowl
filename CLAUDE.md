@@ -8,6 +8,10 @@
 * The software is being implemented based on the docs in the `v0.4` folder.
 * As code is being written ensure it aligns with the goals and intent of those docs.
 * Run `eval mise list` to initialize the Python 3.14 environment
+* Use `uv`
+    - For arbitrary Python on the CLI, run `uv run python <args>` (never `python` / `python3`).
+    - To run `pytest`, use `uv run pytest`.
+    - To install Python dependencies, use `uv pip install`.
 
 ## Help user be efficient
 

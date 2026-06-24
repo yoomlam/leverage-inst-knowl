@@ -17,6 +17,16 @@ and [../docs/brainstorms/2026-06-24-01-catalog-confirmations-mcp-service-require
 
 There is **no** generic query tool by design.
 
+## Set up
+
+Create and activate a virtual environment, then install the package:
+
+```sh
+uv venv                        # creates .venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+```
+
 ## Run the test database
 
 ```sh
@@ -39,7 +49,6 @@ membership in the `*_writer` / `dl_reader` roles per your governed-writer policy
 ## Test
 
 ```sh
-pip install -e ".[dev]"
 LIK_ENV=test pytest
 ```
 
