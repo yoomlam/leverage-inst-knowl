@@ -29,3 +29,25 @@ Two ways to derive the `source_state` content-state marker from this connector. 
 **When Option B would win:** if the sync body fetch becomes a real cost (page volume, rate limits) **and** day-level change detection is acceptable. Until then, Option A's simplicity and exactness outweigh saving one fetch per page on a daily job.
 
 **Design impact:** confirmations and `catalog.source_refs[]` anchor to an opaque content-state marker compared by equality, not to a version number. See [docs/brainstorms/2026-06-25-02-confirmation-content-state-marker-requirements.md](docs/brainstorms/2026-06-25-02-confirmation-content-state-marker-requirements.md). For Confluence the marker is a content hash of the page body (Option A) — not `lastModified` — so change detection is not blocked by the missing version number.
+
+## Confluence MCP: `getConfluencePage` Returns the Wrong Page Under Concurrency
+
+When multiple `getConfluencePage` calls run **concurrently** (same batch / parallel tool
+calls), the connector sometimes returns a **different page than the `pageId` requested** —
+the response carries another in-flight request's content. Observed live during a sync of 15
+project-index pages: two pages' Update-History fetches each came back with an *unrelated*
+page's body (a third page that was also being fetched in the same batch). The returned object's
+`id` field did **not** match the requested `pageId`.
+
+**Impact:** silent data corruption. A hash or verification computed from a mismatched body is
+wrong but looks valid — there is no error, just the wrong content. For a body-hash marker
+(Option A above) this means a `source_state` that belongs to the wrong page.
+
+**Mitigations:**
+- **Serialize** `getConfluencePage` calls — issue them one at a time, not in a parallel batch.
+- **Verify `id`** on every response: assert the returned object's `id` equals the requested
+  `pageId`; on mismatch, retry until it matches.
+
+`searchConfluenceUsingCql` showed a related symptom under concurrency (one query's result
+duplicated another's), so the same serialize-and-verify discipline applies to batched CQL
+lookups.

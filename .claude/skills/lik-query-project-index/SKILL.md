@@ -92,6 +92,16 @@ Confluence connector exposes no stable native signal (no version number; `lastMo
 a relative string like `"about 5 hours ago"`), so a body hash is the only reliable marker — see
 [../../../limitations.md](../../../limitations.md).
 
+**Response integrity guard (required).** The Confluence MCP connector can return the **wrong
+page** when `getConfluencePage` / `searchConfluenceUsingCql` calls run concurrently — a response
+silently carries another in-flight request's body, with no error (see
+[../../../limitations.md](../../../limitations.md)). Hashing a mismatched body yields a
+`source_state` for the wrong page, so confirmations and `edited_since` checks compare against the
+wrong content. Before you hash or cite any page, assert the returned object's `id` equals the
+`pageId` you requested (and that each CQL result belongs to the query you sent); on mismatch,
+re-issue that single call serially until the `id` matches. Parallel fetches are fine as long as
+each response passes this check first.
+
 Call `read_confirmations` with that citation **and** `current_source_state` set to the same live
 body hash. It returns one row per user who confirmed the source, each carrying:
 - `confirmed_by`, and
@@ -104,7 +114,7 @@ since-edited version)"*.
 
 ## Confirm (after answering)
 
-Offer: *"Confirm any of these sources as correct? Reply with the source number."* On a pick, call
+Offer: *"Provide positive feedback for future queries by confirming any of these sources as correct and useful? Reply with the source number."* On a pick, call
 `confirm_source` with the **same citation** (the live body hash as `source_state`), passing
 the user's email as the token so `confirmed_by` is the real person, not the service account.
 Re-confirming a source updates the user's stored marker to the current content. Report the result:

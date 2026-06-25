@@ -45,7 +45,8 @@ of the page body**, computed per the shared recipe below.
 
 **Compute the content-state marker.** For each page, fetch its body and compute `source_state`
 per the Content-state marker recipe below. This is the **main** project-index page (this step's
-page) — not its Update History child. You may batch these fetches in parallel across all pages.
+page) — not its Update History child. You may batch these fetches in parallel across all pages —
+but every response **must** pass the Response integrity guard below before you hash it.
 
 ### Content-state marker recipe (shared with `lik-query-project-index`)
 
@@ -57,6 +58,22 @@ page) — not its Update History child. You may batch these fetches in parallel 
 The `lik-query-project-index` skill computes `source_state` the **identical** way, so a stored
 marker and a live marker compare equal whenever the content is unchanged. Any change to this
 recipe must be mirrored in both skills or "edited since" will false-positive on every page.
+
+### Response integrity guard (required)
+
+The Confluence MCP connector can return the **wrong page** when `getConfluencePage` /
+`searchConfluenceUsingCql` calls run concurrently — a response silently carries another
+in-flight request's body, with no error (see [../../../limitations.md](../../../limitations.md)).
+A hash or verification computed from a mismatched body is wrong but looks valid, poisoning the
+row's `source_state`.
+
+Parallel batching is allowed for speed, but **verify every response before using it**:
+- `getConfluencePage`: assert the returned object's `id` equals the `pageId` you requested. On
+  mismatch, re-issue that single call (serially) until the `id` matches, or fail that row.
+- `searchConfluenceUsingCql`: confirm each result belongs to the query you sent (e.g. the
+  `ancestor`/space you asked for). On mismatch, re-run that query alone.
+
+Hash the body, or read the Update-History table, **only** from a response that passed this check.
 
 ### Step 2 — Read each page's Update History
 
@@ -70,7 +87,8 @@ For each page from Step 1, find and read its Update History child page.
 If no result → `verification = "unverified"`. Skip 2b.
 
 **2b — Read the page body.** Call `getConfluencePage` with the returned page ID and
-`contentFormat: "markdown"`. The body contains a table of update history entries.
+`contentFormat: "markdown"`, then apply the **Response integrity guard** (assert returned `id`
+== requested page ID; retry on mismatch). The body contains a table of update history entries.
 
 Interpret the table to decide whether a human has verified the project index:
 - `human-verified` — the table has at least one row where the content indicates a deliberate
@@ -85,7 +103,8 @@ Interpret the table to decide whether a human has verified the project index:
 Set `verification`, `verified_by`, and `verified_at` accordingly.
 
 You may batch the CQL lookups in parallel across all pages; fetch each page body only after
-its CQL returns a hit.
+its CQL returns a hit. Apply the **Response integrity guard** to every CQL result and every
+`getConfluencePage` response before trusting it.
 
 ### Step 3 — Register one Catalog row per page
 
