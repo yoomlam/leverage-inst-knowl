@@ -7,8 +7,10 @@
 
 * The software is being implemented based on the docs in the `v0.4` folder.
     - As code is being written ensure it aligns with the goals and intent of those docs.
+* Keep designs store-agnostic. A design pinned to a particular Data Source's (e.g. Confluence's) quirks would break on the next source. Code modifications must be general to different DSs.
 * Run `eval mise list` to initialize the uv and python 3.14 environment.
 * The code is under the `lik-mcp` folder, so `cd lik-mcp` before running coding tools.
+* **DB schema changes:** The project is in drafting mode with no production deployment. For schema changes, prefer dropping and recreating the DB (`docker compose down -v && docker compose up -d`) over writing idempotent migration scripts. No backward-compatibility overhead needed until a production deployment exists.
 * Use `uv`
     - To activate the Python virtual environment, `source .venv/bin/activate`
     - For arbitrary Python on the CLI, run `uv run python <args>` (never `python` / `python3`).
