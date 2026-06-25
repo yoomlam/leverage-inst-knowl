@@ -125,8 +125,8 @@ def build_server(
         """Record a user's confirmation that a cited source was right. The confirming
         identity comes from the verified token (never self-asserted)."""
         logger.info(
-            "tool=confirm_source request store_kind=%r location=%r locator=%r version=%r",
-            citation.store_kind, citation.location, citation.locator, citation.version,
+            "tool=confirm_source request store_kind=%r location=%r locator=%r source_state=%r",
+            citation.store_kind, citation.location, citation.locator, citation.source_state,
         )
         identity = _authorize("confirm_source", token)
         result = confirm_source(db, citation, identity.email, resolver)
@@ -134,14 +134,21 @@ def build_server(
         return result
 
     @mcp.tool(name="read_confirmations")
-    def _read_confirmations(citation: Citation, token: str | None = None) -> ConfirmationsResult:
-        """Return accumulated confirmations for one cited source. Version is optional — omit when the store does not provide one."""
+    def _read_confirmations(
+        citation: Citation,
+        current_source_state: str | None = None,
+        token: str | None = None,
+    ) -> ConfirmationsResult:
+        """Return accumulated confirmations for one cited source. Pass `current_source_state`
+        (the source's live content-state marker) to flag each row's `edited_since`; omit it
+        and `edited_since` is None (unknown). The citation's own `source_state` is ignored
+        for matching."""
         logger.info(
-            "tool=read_confirmations request store_kind=%r location=%r locator=%r version=%r",
-            citation.store_kind, citation.location, citation.locator, citation.version,
+            "tool=read_confirmations request store_kind=%r location=%r locator=%r current_source_state=%r",
+            citation.store_kind, citation.location, citation.locator, current_source_state,
         )
         _authorize("read_confirmations", token)
-        result = read_confirmations(db, citation)
+        result = read_confirmations(db, citation, current_source_state)
         logger.info("tool=read_confirmations result count=%d", result.count)
         return result
 

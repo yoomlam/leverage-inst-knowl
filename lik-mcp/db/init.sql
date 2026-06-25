@@ -41,26 +41,24 @@ CREATE INDEX IF NOT EXISTS catalog_access_groups_gin ON catalog USING GIN (acces
 -- matching in search_catalog_entries.
 CREATE INDEX IF NOT EXISTS catalog_subject_trgm ON catalog USING GIN (subject gin_trgm_ops);
 
--- Confirmation signals: durable, non-recomputable human trust. `locator` and `version`
--- are NOT NULL DEFAULT '' so the dedup key is reliable (a NULL never equals a NULL in UNIQUE).
--- `version` defaults to '' when the store cannot supply one (e.g. Confluence via MCP);
--- use `created_at` for recency-based trust weighing in that case.
+-- Confirmation signals: durable, non-recomputable human trust. `locator` is NOT NULL
+-- DEFAULT '' so the dedup key is reliable (a NULL never equals a NULL in UNIQUE).
+-- `source_state` is an opaque content-state marker (a native change signal or a content
+-- hash, per source) recorded so "edited since" works; it is NOT part of the dedup key, so
+-- one user has at most one confirmation per source and re-confirming updates the marker.
+-- It defaults to '' when the store cannot supply one (e.g. Confluence via MCP).
 CREATE TABLE IF NOT EXISTS confirmations (
     id           bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     store_kind   text        NOT NULL,
     location     text        NOT NULL,
     locator      text        NOT NULL DEFAULT '',
-    version      text        NOT NULL DEFAULT '',
+    source_state text        NOT NULL DEFAULT '',
     confirmed_by text        NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),
     archived_at  timestamptz,  -- reserved for the deferred age-out/archive lifecycle
-    -- At most one confirmation per user per cited source-version.
-    CONSTRAINT confirmations_unique UNIQUE (confirmed_by, store_kind, location, locator, version)
+    -- At most one confirmation per user per cited source (marker is non-key state).
+    CONSTRAINT confirmations_unique UNIQUE (confirmed_by, store_kind, location, locator)
 );
-
--- Idempotent migration: add DEFAULT '' to version on existing instances.
--- CREATE TABLE IF NOT EXISTS above won't alter an already-existing table.
-ALTER TABLE confirmations ALTER COLUMN version SET DEFAULT '';
 
 -- Least-privilege roles per output type (R11). The deployed app role is granted
 -- membership as needed; per-action role switching is wired in a later slice.

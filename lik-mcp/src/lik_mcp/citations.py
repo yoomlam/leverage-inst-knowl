@@ -7,24 +7,25 @@ KNOWN_STORE_KINDS = {"gdoc", "gsheet", "confluence", "postgres", "bigquery"}
 
 
 class Citation(BaseModel):
-    """A resolvable reference to a cited source: store_kind + location + locator + version
-    (the same shape the Catalog uses). `locator` and `version` normalize to '' so they
-    join reliably in UNIQUE constraints. `version` is optional — use `created_at` for
-    recency weighing when the store cannot supply a version number."""
+    """A resolvable reference to a cited source: store_kind + location + locator + source_state
+    (the same shape the Catalog uses). `locator` and `source_state` normalize to '' so they
+    join reliably. `source_state` is an opaque content-state marker (a native change signal
+    or a content hash, not necessarily a version number); it is compared by equality to
+    detect "edited since" and is optional — defaults to '' when the store supplies none."""
 
     store_kind: str
     location: str
     locator: str = ""
-    version: str = ""
+    source_state: str = ""
 
     @field_validator("locator", mode="before")
     @classmethod
     def _normalize_locator(cls, v):
         return v or ""
 
-    @field_validator("version", mode="before")
+    @field_validator("source_state", mode="before")
     @classmethod
-    def _normalize_version(cls, v):
+    def _normalize_source_state(cls, v):
         return v or ""
 
 

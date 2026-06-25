@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from lik_mcp.catalog import (
     CatalogEntry,
     SourceRef,
@@ -64,39 +67,38 @@ def test_list_unknown_type_returns_empty(db):
     assert result.entries == []
 
 
-def test_source_refs_with_fetched_at(db):
-    """source_refs round-trips with fetched_at populated (R4)."""
-    entry = _entry(source_refs=[SourceRef(id="p1", fetched_at="2026-06-24T00:00:00Z")])
+def test_source_refs_source_state_round_trips(db):
+    """source_refs round-trips with source_state populated (R4) — the opaque content-state
+    marker a consumer compares by equality to detect drift."""
+    entry = _entry(source_refs=[SourceRef(id="p1", source_state="abc123")])
     register_catalog_entry(db, entry, updated_by="svc")
 
     result = list_catalog_entries(db, "project-summary")
     refs = result.entries[0]["source_refs"]
     assert len(refs) == 1
     assert refs[0]["id"] == "p1"
-    assert refs[0]["fetched_at"] == "2026-06-24T00:00:00Z"
+    assert refs[0]["source_state"] == "abc123"
 
 
-def test_source_refs_legacy_shape(db):
-    """Legacy source_refs with only id (no version, no fetched_at) deserializes
-    with explicit null fields — not absent keys (R3)."""
+def test_source_refs_no_source_state(db):
+    """source_refs with only id (no source_state) deserializes with an explicit null
+    field — not an absent key."""
     entry = _entry(source_refs=[SourceRef(id="p1")])
     register_catalog_entry(db, entry, updated_by="svc")
 
     result = list_catalog_entries(db, "project-summary")
     ref = result.entries[0]["source_refs"][0]
     assert ref["id"] == "p1"
-    assert ref["version"] is None
-    assert ref["fetched_at"] is None
+    assert ref["source_state"] is None
 
 
-def test_source_refs_version_preserved(db):
-    """Non-null version round-trips intact — stores that expose versions can use them (R6)."""
-    entry = _entry(source_refs=[SourceRef(id="p1", version="v5")])
-    register_catalog_entry(db, entry, updated_by="svc")
-
-    result = list_catalog_entries(db, "project-summary")
-    ref = result.entries[0]["source_refs"][0]
-    assert ref["version"] == "v5"
+def test_source_refs_rejects_removed_fields(db):
+    """The removed `version` / `fetched_at` fields fail loudly at the contract boundary
+    rather than being silently dropped (System-Wide Impact)."""
+    with pytest.raises(ValidationError):
+        SourceRef(id="p1", fetched_at="2026-06-24T00:00:00Z")
+    with pytest.raises(ValidationError):
+        SourceRef(id="p1", version="v5")
 
 
 def test_source_refs_empty_list(db):

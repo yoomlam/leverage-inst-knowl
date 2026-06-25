@@ -9,94 +9,139 @@ BOB = "bob@navapbc.com"
 
 
 def _citation(**overrides) -> Citation:
-    base = dict(store_kind="confluence", location="page:123", locator="", version="v5")
+    base = dict(store_kind="confluence", location="page:123", locator="", source_state="abc")
     base.update(overrides)
     return Citation(**base)
 
 
-def _citation_no_version(**overrides) -> Citation:
+def _citation_no_state(**overrides) -> Citation:
     base = dict(store_kind="confluence", location="page:123", locator="")
     base.update(overrides)
     return Citation(**base)
 
 
 def test_unresolvable_citation_rejected(db):
-    """AE2 — a citation that doesn't resolve is refused and writes no row."""
-    bad = Citation(store_kind="unknown-store", location="x", version="v1")
+    """A citation that doesn't resolve is refused and writes no row."""
+    bad = Citation(store_kind="unknown-store", location="x", source_state="s1")
     result = confirm_source(db, bad, ALICE, RESOLVER)
     assert result.status == "rejected"
     assert result.reason == "unresolvable_citation"
     assert read_confirmations(db, bad).count == 0
 
 
-def test_duplicate_deduped(db):
-    """AE3 — the same user confirming the same source-version twice yields one row."""
-    citation = _citation()
+def test_confirm_records(db):
+    """A resolvable confirmation is recorded with its source_state marker."""
+    citation = _citation(source_state="abc")
     assert confirm_source(db, citation, ALICE, RESOLVER).status == "recorded"
-    assert confirm_source(db, citation, ALICE, RESOLVER).status == "duplicate"
-    assert read_confirmations(db, citation).count == 1
-
-
-def test_duplicate_deduped_no_version(db):
-    """Dedup works for version='' — same user can't confirm same source twice."""
-    citation = _citation_no_version()
-    assert confirm_source(db, citation, ALICE, RESOLVER).status == "recorded"
-    assert confirm_source(db, citation, ALICE, RESOLVER).status == "duplicate"
-    assert read_confirmations(db, citation).count == 1
-
-
-def test_read_is_cross_version(db):
-    """AE4 (redefined, R9) — read_confirmations returns confirmations across all versions
-    of a source; each row carries its version so the consumer weighs current vs prior.
-    confirm_source still records per exact version."""
-    confirm_source(db, _citation(version="v5"), ALICE, RESOLVER)
-
-    # Reading with any version of the same source surfaces the v5 confirmation.
-    by_v5 = read_confirmations(db, _citation(version="v5"))
-    by_v7 = read_confirmations(db, _citation(version="v7"))
-    assert by_v5.count == 1
-    assert by_v7.count == 1
-    assert by_v7.confirmations[0].version == "v5"
-
-    # Each row has created_at in ISO 8601 format (R2).
-    assert re.match(r"\d{4}-\d{2}-\d{2}T", by_v5.confirmations[0].created_at)
-
-    # A second confirmation on a later version accumulates; both versions are returned.
-    confirm_source(db, _citation(version="v7"), ALICE, RESOLVER)
-    both = read_confirmations(db, _citation(version="v7"))
-    assert both.count == 2
-    assert sorted(c.version for c in both.confirmations) == ["v5", "v7"]
-
-
-def test_read_cross_version_with_no_version(db):
-    """Cross-version read includes version='' rows alongside versioned rows."""
-    confirm_source(db, _citation(version="v5"), ALICE, RESOLVER)
-    confirm_source(db, _citation_no_version(), BOB, RESOLVER)
-
-    # Reading with version="" returns both.
-    result = read_confirmations(db, _citation_no_version())
-    assert result.count == 2
-    versions = {c.version for c in result.confirmations}
-    assert "" in versions
-    assert "v5" in versions
-
-
-def test_confirm_with_version_none_normalizes(db):
-    """Citation(version=None) normalizes to '' and records successfully (R1)."""
-    citation = Citation(store_kind="confluence", location="page:456", version=None)
-    result = confirm_source(db, citation, ALICE, RESOLVER)
-    assert result.status == "recorded"
     rows = read_confirmations(db, citation)
     assert rows.count == 1
-    assert rows.confirmations[0].version == ""
+    assert rows.confirmations[0].source_state == "abc"
+    assert rows.confirmations[0].confirmed_by == ALICE
 
 
-def test_no_version_row_has_created_at(db):
-    """When version='', created_at is present and parseable — usable for recency weighing."""
-    citation = _citation_no_version()
+def test_reconfirm_upserts_to_one_row(db):
+    """Re-confirming the same source by the same user keeps ONE row and updates the
+    stored marker to the latest state vouched for — always returns 'recorded'."""
+    assert confirm_source(db, _citation(source_state="abc"), ALICE, RESOLVER).status == "recorded"
+    assert confirm_source(db, _citation(source_state="xyz"), ALICE, RESOLVER).status == "recorded"
+
+    rows = read_confirmations(db, _citation())
+    assert rows.count == 1
+    assert rows.confirmations[0].source_state == "xyz"
+
+
+def test_reconfirm_same_marker_idempotent(db):
+    """Confirming the exact same source+marker twice stays one row (no duplicate slot)."""
+    citation = _citation(source_state="abc")
+    assert confirm_source(db, citation, ALICE, RESOLVER).status == "recorded"
+    assert confirm_source(db, citation, ALICE, RESOLVER).status == "recorded"
+    assert read_confirmations(db, citation).count == 1
+
+
+def test_distinct_users_each_get_a_row(db):
+    """Two different users confirming the same source yield two rows, each with its own
+    marker — the marker is non-key state, but confirmed_by is part of the key."""
+    confirm_source(db, _citation(source_state="abc"), ALICE, RESOLVER)
+    confirm_source(db, _citation(source_state="def"), BOB, RESOLVER)
+
+    rows = read_confirmations(db, _citation())
+    assert rows.count == 2
+    by_user = {c.confirmed_by: c.source_state for c in rows.confirmations}
+    assert by_user == {ALICE: "abc", BOB: "def"}
+
+
+def test_read_matches_on_source_not_marker(db):
+    """read_confirmations matches on store_kind + location + locator; the citation's own
+    source_state does not filter, so a read with any marker surfaces the confirmation."""
+    confirm_source(db, _citation(source_state="abc"), ALICE, RESOLVER)
+
+    found = read_confirmations(db, _citation(source_state="totally-different"))
+    assert found.count == 1
+    assert found.confirmations[0].source_state == "abc"
+    # created_at is ISO 8601 — the basis for recency weighing.
+    assert re.match(r"\d{4}-\d{2}-\d{2}T", found.confirmations[0].created_at)
+
+
+def test_confirm_with_source_state_none_normalizes(db):
+    """Citation(source_state=None) normalizes to '' and records successfully."""
+    citation = Citation(store_kind="confluence", location="page:456", source_state=None)
+    assert confirm_source(db, citation, ALICE, RESOLVER).status == "recorded"
+    rows = read_confirmations(db, citation)
+    assert rows.count == 1
+    assert rows.confirmations[0].source_state == ""
+
+
+def test_no_marker_row_has_created_at(db):
+    """When source_state='', created_at is still present and parseable for recency weighing."""
+    citation = _citation_no_state()
     confirm_source(db, citation, ALICE, RESOLVER)
     rows = read_confirmations(db, citation)
     assert rows.count == 1
     row = rows.confirmations[0]
-    assert row.version == ""
+    assert row.source_state == ""
     assert re.match(r"\d{4}-\d{2}-\d{2}T", row.created_at)
+
+
+def test_edited_since_false_when_marker_matches(db):
+    """Live marker == stored marker -> edited_since is False (confirmed state still current)."""
+    confirm_source(db, _citation(source_state="abc"), ALICE, RESOLVER)
+    rows = read_confirmations(db, _citation(), current_source_state="abc")
+    assert rows.confirmations[0].edited_since is False
+
+
+def test_edited_since_true_when_marker_differs(db):
+    """Live marker != stored marker -> edited_since is True (source edited since confirmed)."""
+    confirm_source(db, _citation(source_state="abc"), ALICE, RESOLVER)
+    rows = read_confirmations(db, _citation(), current_source_state="xyz")
+    assert rows.confirmations[0].edited_since is True
+
+
+def test_edited_since_none_when_no_live_marker(db):
+    """No current_source_state supplied -> edited_since is None (unknown, not unchanged)."""
+    confirm_source(db, _citation(source_state="abc"), ALICE, RESOLVER)
+    rows = read_confirmations(db, _citation())
+    assert rows.confirmations[0].edited_since is None
+
+
+def test_edited_since_true_when_stored_marker_empty(db):
+    """A stored '' marker differs from any non-empty live marker -> edited_since is True."""
+    confirm_source(db, _citation_no_state(), ALICE, RESOLVER)
+    rows = read_confirmations(db, _citation_no_state(), current_source_state="abc")
+    assert rows.confirmations[0].source_state == ""
+    assert rows.confirmations[0].edited_since is True
+
+
+def test_edited_since_per_user(db):
+    """edited_since is computed per row against each user's own stored marker."""
+    confirm_source(db, _citation(source_state="abc"), ALICE, RESOLVER)
+    confirm_source(db, _citation(source_state="xyz"), BOB, RESOLVER)
+    rows = read_confirmations(db, _citation(), current_source_state="xyz")
+    flags = {c.confirmed_by: c.edited_since for c in rows.confirmations}
+    assert flags == {ALICE: True, BOB: False}
+
+
+def test_read_no_confirmations_is_empty(db):
+    """A source with no confirmations is a clean empty result, even with a live marker."""
+    rows = read_confirmations(db, _citation(), current_source_state="abc")
+    assert rows.count == 0
+    assert rows.confirmations == []

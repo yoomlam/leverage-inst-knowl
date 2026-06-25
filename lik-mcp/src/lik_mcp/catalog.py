@@ -2,20 +2,23 @@ from datetime import datetime
 from typing import Optional
 
 from psycopg.types.json import Json
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .db import Database
 
 
 class SourceRef(BaseModel):
     """One entry in `source_refs`: a pointer to a DS record this Catalog row was derived
-    from. `version` is the store's own version identifier when available; `fetched_at` is
-    an ISO 8601 timestamp recorded at sync time as a proxy when no version is available.
-    Both are optional so legacy rows (missing either field) deserialize without error."""
+    from. `source_state` is an opaque content-state marker (a native change signal or a
+    content hash, per source), compared by equality to detect drift. It is optional so a
+    row that omits it deserializes without error; recency uses `catalog.updated_at`.
+    Extra fields are forbidden so a caller still sending the removed `version` / `fetched_at`
+    fails loudly at the contract boundary instead of having them silently dropped."""
+
+    model_config = ConfigDict(extra="forbid")
 
     id: str
-    version: Optional[str] = None
-    fetched_at: Optional[str] = None
+    source_state: Optional[str] = None
 
 
 class CatalogEntry(BaseModel):
