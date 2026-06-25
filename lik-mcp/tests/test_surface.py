@@ -7,6 +7,7 @@ async def test_only_intent_named_tools(server):
         "register_catalog_entry",
         "lookup_catalog_entry",
         "list_catalog_entries",
+        "search_catalog_entries",
         "confirm_source",
         "read_confirmations",
     }

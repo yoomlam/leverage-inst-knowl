@@ -9,9 +9,11 @@ from .catalog import (
     ListResult,
     LookupResult,
     RegisterResult,
+    SearchResult,
     list_catalog_entries,
     lookup_catalog_entry,
     register_catalog_entry,
+    search_catalog_entries,
 )
 from .citations import Citation, CitationResolver
 from .confirmations import (
@@ -95,6 +97,27 @@ def build_server(
         _authorize("list_catalog_entries", token)
         result = list_catalog_entries(db, entry_type)
         logger.info("tool=list_catalog_entries result count=%d", result.count)
+        return result
+
+    @mcp.tool(name="search_catalog_entries")
+    def _search_catalog_entries(
+        entry_type: str,
+        query: str,
+        category: str | None = None,
+        limit: int = 10,
+        token: str | None = None,
+    ) -> SearchResult:
+        """Partial + fuzzy search on `subject` within one entry_type. Returns the top
+        `limit` rows ranked by similarity — a bounded candidate set for placing a fuzzy
+        question on the right key, not a full read. Optional `category` is an exact-match
+        pre-filter. No match = empty result, never an error."""
+        logger.info(
+            "tool=search_catalog_entries request entry_type=%r query=%r category=%r limit=%d",
+            entry_type, query, category, limit,
+        )
+        _authorize("search_catalog_entries", token)
+        result = search_catalog_entries(db, entry_type, query, category=category, limit=limit)
+        logger.info("tool=search_catalog_entries result count=%d", result.count)
         return result
 
     @mcp.tool(name="confirm_source")
