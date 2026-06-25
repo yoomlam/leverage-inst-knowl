@@ -183,6 +183,23 @@ def test_revote_change_reason_clears_stale_comment(db):
     assert _raw_votes(db) == [{"vote": "down", "reason": "bad-retrieval", "comment": None}]
 
 
+def test_revote_down_with_comment_to_up_clears_comment(db):
+    """Reverse flip: a down/wrong-content vote with a note flipped to an up vote clears both
+    the reason and the comment — the up row carries no stale negative state."""
+    confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="wrong-content", comment="was stale")
+    confirm_source(db, _citation(), ALICE, RESOLVER)  # flip to up
+    assert _raw_votes(db) == [{"vote": "up", "reason": None, "comment": None}]
+
+
+def test_whitespace_reason_and_comment_normalized(db):
+    """Whitespace-only reason/comment normalize to empty: a blank reason on a down vote reads
+    as missing (not invalid), and a blank comment is stored as NULL."""
+    blank_reason = confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="   ")
+    assert blank_reason.status == "rejected" and blank_reason.reason == "missing_reason"
+    confirm_source(db, _citation(), ALICE, RESOLVER, comment="   ")
+    assert _raw_votes(db) == [{"vote": "up", "reason": None, "comment": None}]
+
+
 def test_downvote_missing_reason_rejected(db):
     """A down vote with no reason is rejected and writes nothing."""
     result = confirm_source(db, _citation(), ALICE, RESOLVER, vote="down")

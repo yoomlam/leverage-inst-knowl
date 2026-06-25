@@ -80,8 +80,8 @@ def confirm_source(
     (flip up<->down or change reason) replaces the prior vote rather than stacking a second."""
     if not resolver.resolve(citation):
         return ConfirmResult(status="rejected", reason="unresolvable_citation")
-    reason = reason or None
-    comment = comment or None
+    reason = (reason or "").strip() or None
+    comment = (comment or "").strip() or None
     if vote not in ("up", "down"):
         return ConfirmResult(status="rejected", reason="invalid_vote")
     if vote == "down":
