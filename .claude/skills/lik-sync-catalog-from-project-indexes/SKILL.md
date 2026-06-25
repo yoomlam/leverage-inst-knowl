@@ -1,146 +1,116 @@
 ---
 name: lik-sync-catalog-from-project-indexes
-description: Catalog the project-index pages from Confluence into the Discovery Layer Catalog in Postgres (the lik-mcp service). Fetches every Confluence page tagged `project-index` and upserts one Catalog row per page via `register_catalog_entry`. Use whenever someone says "sync the project indexes", "refresh the project-index catalog", "catalog the project indexes into Postgres", or asks to (re)build Catalog rows from the Project Index Directory. This is a DL-creation skill — it writes to the Catalog, not to Confluence.
+description: Catalog the project-index pages from Confluence into the Discovery Layer Catalog (the lik-mcp service). Fetches every Confluence page tagged `project-index` and upserts one Catalog row per page via `register_catalog_entry`. Use whenever someone says "sync the project indexes", "refresh the project-index catalog", "catalog the project indexes", or asks to (re)build Catalog rows from the Project Index Directory. This is a DL-creation skill: the project-index pages are authored by a separate process; this skill only registers them as Catalog rows — it writes to the Catalog, never to Confluence.
 ---
 
 # Sync Catalog from Project Indexes
 
-Crawls all Confluence pages tagged `project-index` and registers one **Catalog** row per page in the Discovery Layer's
-service-fronted store (Postgres, fronted by the **lik-mcp** MCP service). This is the Postgres counterpart of the
-`discovery-catalog-sync` skill, which writes the same source pages into a Confluence table instead.
+Crawl every Confluence page tagged `project-index` and register one **Catalog** row per page in the Discovery Layer's
+Catalog store (fronted by the **lik-mcp** service). This is the Catalog-store counterpart of `discovery-catalog-sync`,
+which writes the same pages into a Confluence table instead.
 
-This is an expensive crawl — run it on demand only, when you want to (re)populate the Catalog for testing or use.
-Re-running is safe: each row upserts on its key, so a second run updates rows in place rather than duplicating them.
+An expensive crawl — run on demand only. Re-running is safe: each row upserts on its key, so a second run updates in
+place rather than duplicating.
 
 ## Prerequisites
 
-- The **lik-mcp** MCP service is connected and pointed at the database you want to populate (for manual testing,
-  `likdb_local` — see the lik-mcp README "Local database").
-- The Atlassian (Confluence) MCP tools are available.
+- **lik-mcp** connected
 
-## What to do
+## Step 1 — Fetch all project-index pages
 
-### Step 1 — Fetch all project-index pages from Confluence
-
-Call `searchConfluenceUsingCql` with:
+`searchConfluenceUsingCql` with:
 - cloudId: `navasage.atlassian.net`
 - cql: `label = "project-index" AND type = page`
 - limit: 250
 
-For each result, collect:
-- `title` → the project name
-- `webUrl` → the page URL
-- page **ID** → the Confluence page ID
-- `space.name`, `summary`, `lastModified`, `author.displayName` → context (optional)
+This label is the canonical source of truth — it matches what the Project Index Directory renders via its Page
+Properties Report macro.
 
-The `label = "project-index"` CQL is the canonical source of truth — it matches exactly what the Project Index Directory
-renders via its Page Properties Report macro.
+Per result, collect:
+- `title` → project name
+- `webUrl` → page URL
+- page **ID**
+- optionally `space.name`, `summary`, `lastModified`, `author.displayName` for context
 
-**Note:** The Confluence MCP connector exposes no stable change signal — no version number, and `lastModified` comes
-back only as a relative string like `"about 5 hours ago"` (see [../../../limitations.md](../../../limitations.md)). So
-the content-state marker is a **hash of the page body**, computed per the shared recipe below.
+**Compute the content-state marker** for each page from its body, per the recipe below — the **main** project-index
+page, not its Update History child. The connector exposes no stable change signal (no version number; `lastModified` is
+only a relative string like `"about 5 hours ago"`), so the
+marker is a body hash. You may batch these fetches in parallel, but every response **must** pass the Response integrity
+guard before you hash it.
 
-**Compute the content-state marker.** For each page, fetch its body and compute `source_state` per the Content-state
-marker recipe below. This is the **main** project-index page (this step's page) — not its Update History child. You may
-batch these fetches in parallel across all pages — but every response **must** pass the Response integrity guard below
-before you hash it.
+## Content-state marker recipe (shared with `lik-query-project-index`)
 
-### Content-state marker recipe (shared with `lik-query-project-index`)
+`source_state` = the SHA-256 hex digest of the page's markdown body:
+1. `getConfluencePage(pageId, contentFormat: "markdown")`, take the `body` **verbatim**.
+2. Write it to a file (no added trailing newline, no normalization) and hash: `shasum -a 256 FILE | cut -d' ' -f1` (or
+   `sha256sum FILE | cut -d' ' -f1` — same digest for the same bytes).
 
-`source_state` is the SHA-256 hex digest of the page's markdown body:
+`lik-query-project-index` computes `source_state` the **identical** way, so a stored and a live marker compare equal
+when content is unchanged. Any change to this recipe must be mirrored in both skills, or "edited since" false-positives
+on every page.
 
-1. Fetch the body: `getConfluencePage(pageId, contentFormat: "markdown")`, take the `body` field **verbatim**.
-2. Write that exact string to a file (no added trailing newline, no normalization) and hash it:
-   `shasum -a 256 FILE | cut -d' ' -f1` (or `sha256sum FILE | cut -d' ' -f1` — both yield the same digest for the same
-   bytes).
+## Response integrity guard (required)
 
-The `lik-query-project-index` skill computes `source_state` the **identical** way, so a stored marker and a live marker
-compare equal whenever the content is unchanged. Any change to this recipe must be mirrored in both skills or "edited
-since" will false-positive on every page.
+Run concurrently, `getConfluencePage` / `searchConfluenceUsingCql` can return the **wrong page** — a response silently
+carries another request's body, with no error. A hash or
+verification from a mismatched body looks valid but poisons the row's `source_state`. Parallel batching is allowed, but
+**verify every response first**:
+- `getConfluencePage`: assert the returned `id` equals the requested `pageId`. On mismatch, re-issue that call serially
+  until it matches, or fail the row.
+- `searchConfluenceUsingCql`: confirm each result belongs to the query you sent (e.g. the `ancestor`/space). On
+  mismatch, re-run that query alone.
 
-### Response integrity guard (required)
+Hash a body or read an Update-History table **only** from a response that passed this check.
 
-The Confluence MCP connector can return the **wrong page** when `getConfluencePage` / `searchConfluenceUsingCql` calls
-run concurrently — a response silently carries another in-flight request's body, with no error (see
-[../../../limitations.md](../../../limitations.md)). A hash or verification computed from a mismatched body is wrong but
-looks valid, poisoning the row's `source_state`.
+## Step 2 — Read each page's Update History
 
-Parallel batching is allowed for speed, but **verify every response before using it**:
-- `getConfluencePage`: assert the returned object's `id` equals the `pageId` you requested. On mismatch, re-issue that
-  single call (serially) until the `id` matches, or fail that row.
-- `searchConfluenceUsingCql`: confirm each result belongs to the query you sent (e.g. the `ancestor`/space you asked
-  for). On mismatch, re-run that query alone.
-
-Hash the body, or read the Update-History table, **only** from a response that passed this check.
-
-### Step 2 — Read each page's Update History
-
-For each page from Step 1, find and read its Update History child page.
-
-**2a — Find the child page.** Call `searchConfluenceUsingCql` with:
+**2a — Find the child.** `searchConfluenceUsingCql` with:
 - cloudId: `navasage.atlassian.net`
 - cql: `ancestor = "<pageId>" AND title = "Update History" AND type = page`
 - limit: 1
 
-If no result → `verification = "unverified"`. Skip 2b.
+No result → `verification = "unverified"`; skip 2b.
 
-**2b — Read the page body.** Call `getConfluencePage` with the returned page ID and `contentFormat: "markdown"`, then
-apply the **Response integrity guard** (assert returned `id` == requested page ID; retry on mismatch). The body contains
-a table of update history entries.
+**2b — Read the body.** `getConfluencePage` with the returned page ID and `contentFormat: "markdown"`, then apply the
+**Response integrity guard**. The body holds a table of update-history entries; interpret it:
+- `human-verified` — at least one row shows a deliberate review (a date, reviewer name, or explicit
+  "reviewed"/"verified"/"updated" signal). From the **most recent such row** (last with a date), extract **"Approved
+  By"** → `verified_by` and **"Date"** → `verified_at` (parse to ISO 8601 UTC).
+- `unverified` — table empty, header-only, or no meaningful review signal (blank/placeholder cells). Leave
+  `verified_by`/`verified_at` null.
 
-Interpret the table to decide whether a human has verified the project index:
-- `human-verified` — the table has at least one row where the content indicates a deliberate review was performed (e.g.,
-  a row with a date, reviewer name, or explicit "reviewed" / "verified" / "updated" signal). Use the **most recent such
-  row** (last row with a date).
-  - Extract the **"Approved By"** column value → `verified_by`
-  - Extract the **"Date"** column value → `verified_at` (parse to ISO 8601 UTC datetime)
-- `unverified` — the table is empty, contains only a header row, or its rows carry no meaningful review signal (e.g.,
-  all cells blank or placeholder text). Leave `verified_by` and `verified_at` as null.
+Set `verification`, `verified_by`, `verified_at` accordingly. You may batch the CQL lookups in parallel; fetch each body
+only after its CQL returns a hit; apply the **Response integrity guard** to every response.
 
-Set `verification`, `verified_by`, and `verified_at` accordingly.
+## Step 3 — Register one Catalog row per page
 
-You may batch the CQL lookups in parallel across all pages; fetch each page body only after its CQL returns a hit. Apply
-the **Response integrity guard** to every CQL result and every `getConfluencePage` response before trusting it.
-
-### Step 3 — Register one Catalog row per page
-
-For each page, call `register_catalog_entry` (the lik-mcp tool) with an `entry` shaped like:
-
-- `entry_type`: `"index"`  *(these pages are curated indexes)*
+`register_catalog_entry` (lik-mcp) with an `entry`:
+- `entry_type`: `"index"`
 - `subject`: `"project: <title>"`  *(e.g. `"project: Atlas"`)*
 - `location`: the page `webUrl`
 - `store_kind`: `"confluence"`
-- `locator`: the Confluence page ID  *(so a consumer can `getConfluencePage` directly)*
-- `source_refs`: `[{ "id": "<pageId>", "source_state": "<SHA-256 body hash from Step 1>" }]`  *(powers staleness checks;
-  `source_state` is the page's opaque content-state marker — a body hash — compared by equality to detect "edited
-  since")*
-- `verification`: `"human-verified"` or `"unverified"` — from Step 2
-- `verified_by`: the "Approved By" value from the Update History table, or null
-- `verified_at`: the "Date" value (ISO 8601 UTC), or null
+- `locator`: the Confluence page ID
+- `source_refs`: `[{ "id": "<pageId>", "source_state": "<body hash from Step 1>" }]`  *(powers staleness checks;
+  compared by equality to detect "edited since")*
+- `verification`: from Step 2
+- `verified_by` / `verified_at`: from the Update History table, else null
 - `computed_by`: `"lik-sync-catalog-from-project-indexes"`
 - `row_provenance`: `"skill"`
 
-Leave the other fields at their defaults (`provenance=ai-generated`, `freshness=current`, `sensitivity=cleared`, empty
-`access_groups`). Each call returns a status of `inserted` or `updated` — tally these for the summary.
+Leave other fields at defaults (`provenance=ai-generated`, `freshness=current`, `sensitivity=cleared`, empty
+`access_groups`). Each call returns `inserted` or `updated` — tally for the summary.
 
-### Step 4 — Summary
-
-Respond with:
+## Step 4 — Summary
 
 ```
-Synced N project-index pages into the Catalog (Postgres).
+Synced N project-index pages into the Catalog.
   • X new rows inserted
   • Y rows updated
 ```
 
 ## Notes
 
-- **Idempotent.** The Catalog upserts on `(entry_type, subject)`, so re-running updates rows in place. A page renamed in
-  Confluence creates a new `subject` (a new row) rather than updating the old one — the stale row ages out via
+- **Idempotent.** A page renamed in Confluence makes a new `subject` (new row); the stale row ages out via
   reconciliation, not this skill.
-- **Targets whatever DB lik-mcp points at.** For manual testing that should be `likdb_local`, not the disposable
-  `likdb_test`. Confirm the server's `LIK_DB_NAME` before a real run.
-- **Writes only the Catalog.** This skill never edits Confluence pages or any other Data Source — it only records where
-  each project-index page lives.
-- If the search returns 0 results, verify you have permission to view the project-index spaces and that the label is
-  spelled correctly.
+- **Writes only the Catalog** — never edits Confluence or any Data Source.
+- 0 results → check you can view the project-index spaces and that the label is spelled correctly.

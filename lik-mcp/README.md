@@ -224,3 +224,7 @@ A local/test harness with throwaway data, not a production service. Until real s
 - Age out old confirmations for scalability.
 - Migrate/Capture trustworthiness in original DS records and archive confirmation signals for scalability.
 - Correct DS record for negative confirmations where `reason`=`wrong-content`.
+
+**Catalog table maintenance/management**
+
+- Age out old rows.
