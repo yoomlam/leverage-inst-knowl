@@ -6,9 +6,11 @@ description: Answer questions about Nava's projects using the Discovery Layer Ca
 # Query Project Index
 
 Answers a project question from the **Catalog** (the lik-mcp service over Postgres), following
-its pointers to the project-index pages in Confluence. It escalates through three levels and
-**asks the user before widening scope** at each step, so the Catalog stays the primary path and
-a broad Confluence search is only a last resort.
+its pointers to the project-index pages in Confluence. On a **retrieval miss** (no project
+located) it escalates through three levels and **asks the user before widening scope** at each
+step, so the Catalog stays the primary path and a broad Confluence search is only a last resort.
+On a **content gap** (the right project is located, but its index page lacks the asked-for
+detail) it widens automatically to fill the gap — see **Content gap** below.
 
 It also surfaces and accumulates **confirmation signals**: it shows how vouched-for each cited
 source is (`read_confirmations`) and offers to record the user's confirmation (`confirm_source`).
@@ -35,7 +37,8 @@ If the question names a specific project, derive `subject = "project: <name>"` a
 `lookup_catalog_entry` with `entry_type = "index"` and that `subject`.
 
 - **Hit:** follow the row — `getConfluencePage` at its `locator` (page ID) or `location` (URL) —
-  read the page, and answer from it. Go to **Rank & present**.
+  read the page, and answer from it. Go to **Rank & present**. If the page resolves but lacks
+  the detail the question needs, treat it as a **Content gap** (below) before answering.
 - **Miss**, or the question doesn't name a single project exactly: call
   `search_catalog_entries` with `entry_type = "index"` and the question's key terms as
   `query`. This catches partial names, typos, and reordered words.
@@ -73,7 +76,36 @@ not the Catalog. Then go to **Rank & present**.
 A Catalog miss or a broken pointer is never an error — it's a cache miss that degrades to the next
 level.
 
+## Content gap — the project resolved but its page doesn't answer the question
+
+A successful retrieval that lacks the asked-for detail (e.g. the index names the project but has
+no tech-stack field) is **not** an answer. Treat the missing detail like a miss and widen — but
+because the user already has a located project and wants that detail, this path runs **(a) then
+(b) automatically**, without the "ask first" prompt the retrieval-miss levels use. Note in the
+answer that the detail came from beyond the index page.
+
+**(a) Search the project's own Confluence space first.** The detail the index omits often lives
+on a child page (architecture, repo/README, onboarding, design docs). Call
+`searchConfluenceUsingCql` with cloudId `navasage.atlassian.net` and cql
+`space = "<space key>" AND type = page AND text ~ "<key terms>"`. The space key comes from the
+located page's `space.key` (or its `location` URL, e.g. `/spaces/PITIR/` → `PITIR`). Read the
+top matches and answer from them.
+
+**(b) Broad search across project-index pages.** If (a) still doesn't answer, run the Level 3
+search — cql `label = "project-index" AND text ~ "<key terms>"` — to catch the detail on a
+*different* project's index (e.g. a shared platform or a sibling project).
+
+Apply the **Response integrity guard** and the **content-state marker recipe** to every page you
+read here, and cite each page you draw from in **Rank & present** like any other source. If
+neither (a) nor (b) surfaces the detail, say so plainly — the index genuinely doesn't capture it.
+
 ## Rank & present (every level)
+
+**Cite every page that contributed to the answer.** Whichever level or method surfaced it — a
+Level 1 Catalog hit or fuzzy candidate, a Level 2 list-scan pick, a Level 3 broad search, or a
+Content-gap **(a)**/**(b)** page — list it as its own numbered source. The numbered citations are
+what the user votes on in **Feedback**, so a relevant page left uncited can never be confirmed or
+flagged. When in doubt whether a page materially informed the answer, cite it.
 
 For each page you're about to cite, build a citation:
 - `store_kind`: `"confluence"`
