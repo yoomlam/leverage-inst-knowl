@@ -47,6 +47,12 @@ CREATE INDEX IF NOT EXISTS catalog_subject_trgm ON catalog USING GIN (subject gi
 -- hash, per source) recorded so "edited since" works; it is NOT part of the dedup key, so
 -- one user has at most one confirmation per source and re-confirming updates the marker.
 -- It defaults to '' when the store cannot supply one (e.g. Confluence via MCP).
+--
+-- The signal is *signed*: `vote` is 'up' (right) or 'down' (wrong). A down vote carries a
+-- `reason` — 'bad-retrieval' (poor/irrelevant result) or 'wrong-content' (factually wrong) —
+-- stored distinctly; an up vote has no reason. `comment` is a reason-agnostic free-text note
+-- (solicited only on wrong-content, but the column is open to any vote). Vote/reason/comment
+-- are non-key state, so re-voting (flip up<->down or change reason) replaces the one row.
 CREATE TABLE IF NOT EXISTS confirmations (
     id           bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     store_kind   text        NOT NULL,
@@ -54,10 +60,19 @@ CREATE TABLE IF NOT EXISTS confirmations (
     locator      text        NOT NULL DEFAULT '',
     source_state text        NOT NULL DEFAULT '',
     confirmed_by text        NOT NULL,
+    vote         text        NOT NULL DEFAULT 'up',
+    reason       text,
+    comment      text,
     created_at   timestamptz NOT NULL DEFAULT now(),
     archived_at  timestamptz,  -- reserved for the deferred age-out/archive lifecycle
     -- At most one confirmation per user per cited source (marker is non-key state).
-    CONSTRAINT confirmations_unique UNIQUE (confirmed_by, store_kind, location, locator)
+    CONSTRAINT confirmations_unique UNIQUE (confirmed_by, store_kind, location, locator),
+    -- Signed-vote integrity: a down vote names a reason; an up vote names none.
+    CONSTRAINT confirmations_vote_kind CHECK (vote IN ('up', 'down')),
+    CONSTRAINT confirmations_reason_matches_vote CHECK (
+        (vote = 'down' AND reason IN ('bad-retrieval', 'wrong-content'))
+        OR (vote = 'up' AND reason IS NULL)
+    )
 );
 
 -- Least-privilege roles per output type (R11). The deployed app role is granted
