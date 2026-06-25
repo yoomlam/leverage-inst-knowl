@@ -12,15 +12,21 @@ class ConfirmResult(BaseModel):
 
 
 class ConfirmationRow(BaseModel):
-    """One row returned by read_confirmations. `source_state` is the opaque content-state
-    marker the user vouched for; `created_at` is when they last confirmed (bumped on
-    re-confirm) and is the basis for recency-based trust weighing. `edited_since` is True
-    when the source has changed since this user confirmed it (stored marker != the live
-    marker the caller supplied), False when it matches, and None when the caller supplied
-    no live marker — None means *unknown*, not *unchanged*."""
+    """One row returned by read_confirmations. `vote` is 'up' (right) or 'down' (wrong);
+    `reason` names a down vote's kind ('bad-retrieval' | 'wrong-content') and is None for an
+    up vote; `comment` is an optional free-text note. The Query skill uses these to soft-demote
+    a flagged source and explain why. `source_state` is the opaque content-state marker the
+    user vouched for; `created_at` is when they last voted (bumped on re-vote) and is the basis
+    for recency-based trust weighing. `edited_since` is True when the source has changed since
+    this user voted (stored marker != the live marker the caller supplied), False when it
+    matches, and None when the caller supplied no live marker — None means *unknown*, not
+    *unchanged*."""
 
     id: int
     confirmed_by: str
+    vote: str
+    reason: Optional[str] = None
+    comment: Optional[str] = None
     source_state: str
     created_at: str  # ISO 8601; basis for recency weighing
     edited_since: Optional[bool] = None
@@ -50,7 +56,7 @@ DO UPDATE SET source_state = EXCLUDED.source_state, vote = EXCLUDED.vote,
 # `id` is a stable tiebreak so rows with identical created_at (e.g. same-now() re-confirms)
 # read back in a deterministic order.
 _SELECT = """
-SELECT id, confirmed_by, source_state, created_at
+SELECT id, confirmed_by, vote, reason, comment, source_state, created_at
 FROM confirmations
 WHERE store_kind = %(store_kind)s AND location = %(location)s
   AND locator = %(locator)s AND archived_at IS NULL
@@ -115,6 +121,9 @@ def read_confirmations(
         ConfirmationRow(
             id=r["id"],
             confirmed_by=r["confirmed_by"],
+            vote=r["vote"],
+            reason=r["reason"],
+            comment=r["comment"],
             source_state=r["source_state"],
             created_at=r["created_at"].isoformat(),
             edited_since=(

@@ -222,6 +222,36 @@ def test_comment_on_upvote_is_stored(db):
     assert _raw_votes(db) == [{"vote": "up", "reason": None, "comment": "handy"}]
 
 
+def test_read_returns_signed_fields(db):
+    """read_confirmations exposes vote/reason/comment so the skill can demote and explain.
+    An up vote and a down vote on the same source both surface, each with its own fields."""
+    confirm_source(db, _citation(), ALICE, RESOLVER)  # up
+    confirm_source(db, _citation(), BOB, RESOLVER, vote="down", reason="wrong-content", comment="stale")
+    rows = read_confirmations(db, _citation())
+    assert rows.count == 2
+    by_user = {c.confirmed_by: (c.vote, c.reason, c.comment) for c in rows.confirmations}
+    assert by_user[ALICE] == ("up", None, None)
+    assert by_user[BOB] == ("down", "wrong-content", "stale")
+
+
+def test_read_returns_wrong_content_note_verbatim(db):
+    """AE5 input: the stored note comes back verbatim to feed the demotion explanation."""
+    note = "states the 2019 rate, superseded in 2022"
+    confirm_source(db, _citation(), ALICE, RESOLVER, vote="down", reason="wrong-content", comment=note)
+    row = read_confirmations(db, _citation()).confirmations[0]
+    assert row.vote == "down" and row.reason == "wrong-content" and row.comment == note
+
+
+def test_edited_since_on_negative_row(db):
+    """R10: a negative signal inherits edited-since — a wrong-content flag on since-changed
+    content reads edited_since True, and matching content reads False."""
+    confirm_source(db, _citation(source_state="v1"), ALICE, RESOLVER, vote="down", reason="bad-retrieval")
+    changed = read_confirmations(db, _citation(), current_source_state="v2")
+    assert changed.confirmations[0].edited_since is True
+    same = read_confirmations(db, _citation(), current_source_state="v1")
+    assert same.confirmations[0].edited_since is False
+
+
 def test_edited_since_true_when_stored_marker_empty(db):
     """A stored '' marker differs from any non-empty live marker -> edited_since is True."""
     confirm_source(db, _citation_no_state(), ALICE, RESOLVER)
