@@ -103,23 +103,52 @@ re-issue that single call serially until the `id` matches. Parallel fetches are 
 each response passes this check first.
 
 Call `read_confirmations` with that citation **and** `current_source_state` set to the same live
-body hash. It returns one row per user who confirmed the source, each carrying:
-- `confirmed_by`, and
-- `edited_since` — `true` if that user vouched for content that has since changed (their stored
-  marker ≠ the live marker), `false` if their confirmation still matches the live content.
+body hash. It returns one row per user who voted on the source, each carrying:
+- `confirmed_by`,
+- `vote` — `up` (the source was right) or `down` (wrong),
+- `reason` — for a down vote, `bad-retrieval` (poor/irrelevant result) or `wrong-content`
+  (factually wrong); `null` for an up vote,
+- `comment` — an optional free-text note (present mainly on `wrong-content` downs), and
+- `edited_since` — `true` if that user voted on content that has since changed (their stored
+  marker ≠ the live marker), `false` if their vote still matches the live content, `null` if
+  unknown.
 
-Rank sources with `edited_since = false` confirmations weighed more heavily than `edited_since =
-true` ones, and present the answer with each citation annotated, e.g. *"(3 confirmations, 1 on a
-since-edited version)"*.
+The signal is **signed**: up votes boost, down votes **soft-demote** — never hide. Rank a source
+lower when down votes outweigh up, but still return it. Weigh `edited_since = false` votes more
+heavily than `edited_since = true` ones (a vote on since-changed content — including a
+wrong-content flag whose source was since corrected — applies only weakly). Annotate every cited
+source:
+- positives, e.g. *"(3 confirmations, 1 on a since-edited version)"*;
+- when a source carries down votes, **explain the demotion** — show the reason kind and, when a
+  `comment` is present, the note, e.g. *"(demoted — flagged by 2: wrong content — 'states the
+  2019 rate, superseded in 2022')"*.
 
-## Confirm (after answering)
+## Feedback (after answering)
 
-Offer: *"Provide positive feedback for future queries by confirming any of these sources as correct and useful? Reply with the source number."* On a pick, call
-`confirm_source` with the **same citation** (the live body hash as `source_state`), passing
-the user's email as the token so `confirmed_by` is the real person, not the service account.
-Re-confirming a source updates the user's stored marker to the current content. Report the result:
-- `recorded` — confirmation saved (or updated, if they had confirmed an earlier version).
-- `rejected` — the citation didn't resolve; say so and don't retry.
+Offer signed feedback with the least typing:
+
+> *"Was a cited source right or wrong? Reply with its number to vouch it was right (e.g. `2`),
+> or the number with a trailing `-` to flag it was wrong (e.g. `2-`)."*
+
+A bare number (or a trailing `+`) is a thumbs-**up**; a trailing `-` is a thumbs-**down**.
+
+**On a down**, ask one quick pick — *bad retrieval* (a poor or irrelevant result) or *wrong
+content* (the source is factually wrong):
+- **bad retrieval** → record it straight away, no further prompt (`vote="down"`,
+  `reason="bad-retrieval"`).
+- **wrong content** → ask *"What's wrong with it?"*, capture the reply as the `comment`
+  (`vote="down"`, `reason="wrong-content"`), **and** offer the correction path: help the user fix
+  the underlying source record under their own login (e.g. edit the Confluence page directly).
+  The feedback is logged regardless of whether they take the correction.
+
+Then call `confirm_source` with the **same citation** (the live body hash as `source_state`),
+the chosen `vote`/`reason`/`comment`, and the user's email as the token so `confirmed_by` is the
+real person, not the service account. A user holds **one current vote per source** — re-voting
+(flipping up↔down or changing the reason) replaces their prior vote, and re-voting updates their
+stored marker to the current content. Report the result:
+- `recorded` — vote saved (or replaced, if they had voted before).
+- `rejected` — the vote didn't go through (e.g. the citation didn't resolve, or a down vote
+  arrived without a valid reason); say so and don't retry.
 
 ## Notes
 
