@@ -1,7 +1,7 @@
 ---
 title: "feat: Signed confirmation feedback (thumbs up / down)"
 type: feat
-status: active
+status: completed
 date: 2026-06-25
 origin: docs/brainstorms/2026-06-25-03-signed-confirmation-feedback-requirements.md
 ---
