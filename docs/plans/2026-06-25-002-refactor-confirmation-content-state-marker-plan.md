@@ -65,7 +65,8 @@ See origin document. Short form: `confirmations.version` sits in the unique cons
 - **`Citation.version` → `Citation.source_state` (clean rename):** Keeps MCP input field name consistent with DB column. No in-repo callers to break. Mapping `version` → `source_state` internally would create a permanent naming inconsistency across the MCP API surface.
 - **"Edited since" computed server-side in `read_confirmations` with caller-supplied token:** `read_confirmations` adds optional `current_source_state: str` param; returns `edited_since: Optional[bool]` per row. The Query skill fetches the live token and passes it in — server never calls external APIs.
 - **`edited_since: None` means unknown, not clean:** When `current_source_state` is not supplied, `edited_since` is `None`. Callers must treat `None` as "unknown," not as "not edited."
-- **Migration via idempotent `ALTER TABLE` at end of `db/init.sql`:** Consistent with the existing migration pattern in that file.
+- **Schema applied by DB reset, no migration script:** Project is in drafting mode with no production deployment, so `db/init.sql` is edited directly and the change is applied via `docker compose down -v && docker compose up -d` (see CLAUDE.md).
+- **`SourceRef` forbids extra fields (`extra='forbid'`):** A caller still sending the removed `version` / `fetched_at` fails loudly at the contract boundary instead of having them silently dropped — converts the System-Wide Impact "break silently" risk into a visible `ValidationError`.
 
 ---
 
