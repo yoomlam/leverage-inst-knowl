@@ -5,19 +5,17 @@ description: Catalog the project-index pages from Confluence into the Discovery 
 
 # Sync Catalog from Project Indexes
 
-Crawls all Confluence pages tagged `project-index` and registers one **Catalog** row per
-page in the Discovery Layer's service-fronted store (Postgres, fronted by the **lik-mcp**
-MCP service). This is the Postgres counterpart of the `discovery-catalog-sync` skill, which
-writes the same source pages into a Confluence table instead.
+Crawls all Confluence pages tagged `project-index` and registers one **Catalog** row per page in the Discovery Layer's
+service-fronted store (Postgres, fronted by the **lik-mcp** MCP service). This is the Postgres counterpart of the
+`discovery-catalog-sync` skill, which writes the same source pages into a Confluence table instead.
 
-This is an expensive crawl — run it on demand only, when you want to (re)populate the
-Catalog for testing or use. Re-running is safe: each row upserts on its key, so a second
-run updates rows in place rather than duplicating them.
+This is an expensive crawl — run it on demand only, when you want to (re)populate the Catalog for testing or use.
+Re-running is safe: each row upserts on its key, so a second run updates rows in place rather than duplicating them.
 
 ## Prerequisites
 
-- The **lik-mcp** MCP service is connected and pointed at the database you want to populate
-  (for manual testing, `likdb_local` — see the lik-mcp README "Local database").
+- The **lik-mcp** MCP service is connected and pointed at the database you want to populate (for manual testing,
+  `likdb_local` — see the lik-mcp README "Local database").
 - The Atlassian (Confluence) MCP tools are available.
 
 ## What to do
@@ -35,43 +33,43 @@ For each result, collect:
 - page **ID** → the Confluence page ID
 - `space.name`, `summary`, `lastModified`, `author.displayName` → context (optional)
 
-The `label = "project-index"` CQL is the canonical source of truth — it matches exactly what
-the Project Index Directory renders via its Page Properties Report macro.
+The `label = "project-index"` CQL is the canonical source of truth — it matches exactly what the Project Index Directory
+renders via its Page Properties Report macro.
 
-**Note:** The Confluence MCP connector exposes no stable change signal — no version number,
-and `lastModified` comes back only as a relative string like `"about 5 hours ago"` (see
-[../../../limitations.md](../../../limitations.md)). So the content-state marker is a **hash
-of the page body**, computed per the shared recipe below.
+**Note:** The Confluence MCP connector exposes no stable change signal — no version number, and `lastModified` comes
+back only as a relative string like `"about 5 hours ago"` (see [../../../limitations.md](../../../limitations.md)). So
+the content-state marker is a **hash of the page body**, computed per the shared recipe below.
 
-**Compute the content-state marker.** For each page, fetch its body and compute `source_state`
-per the Content-state marker recipe below. This is the **main** project-index page (this step's
-page) — not its Update History child. You may batch these fetches in parallel across all pages —
-but every response **must** pass the Response integrity guard below before you hash it.
+**Compute the content-state marker.** For each page, fetch its body and compute `source_state` per the Content-state
+marker recipe below. This is the **main** project-index page (this step's page) — not its Update History child. You may
+batch these fetches in parallel across all pages — but every response **must** pass the Response integrity guard below
+before you hash it.
 
 ### Content-state marker recipe (shared with `lik-query-project-index`)
 
 `source_state` is the SHA-256 hex digest of the page's markdown body:
 
 1. Fetch the body: `getConfluencePage(pageId, contentFormat: "markdown")`, take the `body` field **verbatim**.
-2. Write that exact string to a file (no added trailing newline, no normalization) and hash it: `shasum -a 256 FILE | cut -d' ' -f1` (or `sha256sum FILE | cut -d' ' -f1` — both yield the same digest for the same bytes).
+2. Write that exact string to a file (no added trailing newline, no normalization) and hash it:
+   `shasum -a 256 FILE | cut -d' ' -f1` (or `sha256sum FILE | cut -d' ' -f1` — both yield the same digest for the same
+   bytes).
 
-The `lik-query-project-index` skill computes `source_state` the **identical** way, so a stored
-marker and a live marker compare equal whenever the content is unchanged. Any change to this
-recipe must be mirrored in both skills or "edited since" will false-positive on every page.
+The `lik-query-project-index` skill computes `source_state` the **identical** way, so a stored marker and a live marker
+compare equal whenever the content is unchanged. Any change to this recipe must be mirrored in both skills or "edited
+since" will false-positive on every page.
 
 ### Response integrity guard (required)
 
-The Confluence MCP connector can return the **wrong page** when `getConfluencePage` /
-`searchConfluenceUsingCql` calls run concurrently — a response silently carries another
-in-flight request's body, with no error (see [../../../limitations.md](../../../limitations.md)).
-A hash or verification computed from a mismatched body is wrong but looks valid, poisoning the
-row's `source_state`.
+The Confluence MCP connector can return the **wrong page** when `getConfluencePage` / `searchConfluenceUsingCql` calls
+run concurrently — a response silently carries another in-flight request's body, with no error (see
+[../../../limitations.md](../../../limitations.md)). A hash or verification computed from a mismatched body is wrong but
+looks valid, poisoning the row's `source_state`.
 
 Parallel batching is allowed for speed, but **verify every response before using it**:
-- `getConfluencePage`: assert the returned object's `id` equals the `pageId` you requested. On
-  mismatch, re-issue that single call (serially) until the `id` matches, or fail that row.
-- `searchConfluenceUsingCql`: confirm each result belongs to the query you sent (e.g. the
-  `ancestor`/space you asked for). On mismatch, re-run that query alone.
+- `getConfluencePage`: assert the returned object's `id` equals the `pageId` you requested. On mismatch, re-issue that
+  single call (serially) until the `id` matches, or fail that row.
+- `searchConfluenceUsingCql`: confirm each result belongs to the query you sent (e.g. the `ancestor`/space you asked
+  for). On mismatch, re-run that query alone.
 
 Hash the body, or read the Update-History table, **only** from a response that passed this check.
 
@@ -86,25 +84,23 @@ For each page from Step 1, find and read its Update History child page.
 
 If no result → `verification = "unverified"`. Skip 2b.
 
-**2b — Read the page body.** Call `getConfluencePage` with the returned page ID and
-`contentFormat: "markdown"`, then apply the **Response integrity guard** (assert returned `id`
-== requested page ID; retry on mismatch). The body contains a table of update history entries.
+**2b — Read the page body.** Call `getConfluencePage` with the returned page ID and `contentFormat: "markdown"`, then
+apply the **Response integrity guard** (assert returned `id` == requested page ID; retry on mismatch). The body contains
+a table of update history entries.
 
 Interpret the table to decide whether a human has verified the project index:
-- `human-verified` — the table has at least one row where the content indicates a deliberate
-  review was performed (e.g., a row with a date, reviewer name, or explicit "reviewed" /
-  "verified" / "updated" signal). Use the **most recent such row** (last row with a date).
+- `human-verified` — the table has at least one row where the content indicates a deliberate review was performed (e.g.,
+  a row with a date, reviewer name, or explicit "reviewed" / "verified" / "updated" signal). Use the **most recent such
+  row** (last row with a date).
   - Extract the **"Approved By"** column value → `verified_by`
   - Extract the **"Date"** column value → `verified_at` (parse to ISO 8601 UTC datetime)
-- `unverified` — the table is empty, contains only a header row, or its rows carry no
-  meaningful review signal (e.g., all cells blank or placeholder text). Leave `verified_by`
-  and `verified_at` as null.
+- `unverified` — the table is empty, contains only a header row, or its rows carry no meaningful review signal (e.g.,
+  all cells blank or placeholder text). Leave `verified_by` and `verified_at` as null.
 
 Set `verification`, `verified_by`, and `verified_at` accordingly.
 
-You may batch the CQL lookups in parallel across all pages; fetch each page body only after
-its CQL returns a hit. Apply the **Response integrity guard** to every CQL result and every
-`getConfluencePage` response before trusting it.
+You may batch the CQL lookups in parallel across all pages; fetch each page body only after its CQL returns a hit. Apply
+the **Response integrity guard** to every CQL result and every `getConfluencePage` response before trusting it.
 
 ### Step 3 — Register one Catalog row per page
 
@@ -115,16 +111,17 @@ For each page, call `register_catalog_entry` (the lik-mcp tool) with an `entry` 
 - `location`: the page `webUrl`
 - `store_kind`: `"confluence"`
 - `locator`: the Confluence page ID  *(so a consumer can `getConfluencePage` directly)*
-- `source_refs`: `[{ "id": "<pageId>", "source_state": "<SHA-256 body hash from Step 1>" }]`  *(powers staleness checks; `source_state` is the page's opaque content-state marker — a body hash — compared by equality to detect "edited since")*
+- `source_refs`: `[{ "id": "<pageId>", "source_state": "<SHA-256 body hash from Step 1>" }]`  *(powers staleness checks;
+  `source_state` is the page's opaque content-state marker — a body hash — compared by equality to detect "edited
+  since")*
 - `verification`: `"human-verified"` or `"unverified"` — from Step 2
 - `verified_by`: the "Approved By" value from the Update History table, or null
 - `verified_at`: the "Date" value (ISO 8601 UTC), or null
 - `computed_by`: `"lik-sync-catalog-from-project-indexes"`
 - `row_provenance`: `"skill"`
 
-Leave the other fields at their defaults (`provenance=ai-generated`, `freshness=current`,
-`sensitivity=cleared`, empty `access_groups`). Each call returns a status of `inserted` or
-`updated` — tally these for the summary.
+Leave the other fields at their defaults (`provenance=ai-generated`, `freshness=current`, `sensitivity=cleared`, empty
+`access_groups`). Each call returns a status of `inserted` or `updated` — tally these for the summary.
 
 ### Step 4 — Summary
 
@@ -138,12 +135,12 @@ Synced N project-index pages into the Catalog (Postgres).
 
 ## Notes
 
-- **Idempotent.** The Catalog upserts on `(entry_type, subject)`, so re-running updates rows
-  in place. A page renamed in Confluence creates a new `subject` (a new row) rather than
-  updating the old one — the stale row ages out via reconciliation, not this skill.
-- **Targets whatever DB lik-mcp points at.** For manual testing that should be `likdb_local`,
-  not the disposable `likdb_test`. Confirm the server's `LIK_DB_NAME` before a real run.
-- **Writes only the Catalog.** This skill never edits Confluence pages or any other Data
-  Source — it only records where each project-index page lives.
-- If the search returns 0 results, verify you have permission to view the project-index spaces
-  and that the label is spelled correctly.
+- **Idempotent.** The Catalog upserts on `(entry_type, subject)`, so re-running updates rows in place. A page renamed in
+  Confluence creates a new `subject` (a new row) rather than updating the old one — the stale row ages out via
+  reconciliation, not this skill.
+- **Targets whatever DB lik-mcp points at.** For manual testing that should be `likdb_local`, not the disposable
+  `likdb_test`. Confirm the server's `LIK_DB_NAME` before a real run.
+- **Writes only the Catalog.** This skill never edits Confluence pages or any other Data Source — it only records where
+  each project-index page lives.
+- If the search returns 0 results, verify you have permission to view the project-index spaces and that the label is
+  spelled correctly.
