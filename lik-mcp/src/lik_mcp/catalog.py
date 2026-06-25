@@ -28,21 +28,25 @@ class CatalogEntry(BaseModel):
     entry_type: str
     subject: str
     location: str
-    store_kind: str
+    store_kind: str  # how to fetch: gdoc | gsheet | confluence | postgres | bigquery
     locator: Optional[str] = None
-    provenance: str = "ai-generated"
+    provenance: str = "ai-generated"  # how the content was produced: ai-generated | human-created
     verification: str = "unverified"
     verified_by: Optional[str] = None
     verified_at: Optional[datetime] = None
     freshness: str = "current"
+    # The DS records this row was derived from; a list so a row synthesized from
+    # several sources can detect drift in any one independently. See SourceRef.
     source_refs: list[SourceRef] = Field(default_factory=list)
     last_computed_at: Optional[datetime] = None
     last_validated_at: Optional[datetime] = None
+    # Propagated ACL hint — the output's single assigned audience group. Never trusted for enforcement.
     access_groups: list[str] = Field(default_factory=list)
-    sensitivity: str = "restricted"
-    category: Optional[str] = None
-    computed_by: str
-    row_provenance: str = "skill"
+    sensitivity: str = "restricted"  # restricted (default) | cleared
+    category: Optional[str] = None  # descriptive classification; also an ACL-mapping input
+    computed_by: str  # the skill that owns this row
+    # which writer owns the row, so the skill re-derives only its own rows and leaves human ones alone
+    row_provenance: str = "skill"  # skill | human
 
 
 class RegisterResult(BaseModel):
