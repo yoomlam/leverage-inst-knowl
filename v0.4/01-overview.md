@@ -8,9 +8,13 @@ A company's knowledge is scattered across many data sources — storage (Google 
 
 ## The idea
 
-Leave the knowledge where it already lives. On top of it, add a **Discovery Layer** that makes finding things fast — **without** copying everything into one place and **without** creating a second, competing "source of truth."
+Leave the knowledge where it already lives, in the **Data Sources** — they stay the single source of truth, and each keeps controlling who may see what. On top, add a **Discovery Layer**: material *derived* from those sources whose only job is to make knowledge fast to find and reuse — **without** copying everything into one place and **without** becoming a second, competing "source of truth."
 
-The Discovery Layer is *mostly computed*: the bulk of it is derived from the original data sources and rebuilt on demand, so it needs no careful tending. The small part that can't be rebuilt is still kept safe: saved answers live in a data source and ride on its backup like any record, while people's confirmations are the one piece the Discovery Layer stores and backs up itself.
+Its outputs come in three kinds, sorted by where each lives and who keeps it safe:
+
+- **Most of it (stored as DS records)** — summaries, indexes, and pointers written back into a Data Source and marked as `discovery-layer` to represent that it is derived. That source stores and backs them up like any record, and can be rebuilt from the sources on demand. Without this prepared material, every tool would re-search the full sources from scratch on each question — the slow, costly repetition the Discovery Layer exists to remove.
+- **The Catalog** — an index to look up where a topic's material lives. This is the first place to start answering a user's question or request. It's built only from the `discovery-layer` DS records — not the full sources — so there's far less to keep current; the Catalog is the coarse, topic-level view across multiple DS systems, while those `discovery-layer` DS records carry the same "what exists and where" in finer detail. The Catalog recomputable and doesn't need backup. Without it, a tool would have to search every DS system to learn what exists and where before it could begin.
+- **Confirmation signals** — people vouching that the source behind an answer was right, or flagging it wrong. These can't be re-derived, so they're the one part the Discovery Layer must back up. Without them, future answers couldn't favor the sources people have already confirmed or steer clear of ones flagged wrong — so without this, the system would never grow more trustworthy the more it's used.
 
 ## The value
 
@@ -23,7 +27,7 @@ The Discovery Layer is *mostly computed*: the bulk of it is derived from the ori
 
 Every design choice traces back to these.
 
-- **Very low maintenance** — most of the Discovery Layer is recomputed from the sources, so it can be rebuilt or discarded rather than tended. The small part that can't be rebuilt rides on existing backups: saved answers are backed up by the data source that holds them, and only people's confirmations need a backup the Discovery Layer runs itself. "Low maintenance" means the stored data needs little tending — not that ongoing cost is zero: recomputing it is recurring compute, and the skills that do the recomputing must be owned and kept current (see <u>Strategy</u>).
+- **Very low maintenance** — most of the Discovery Layer is recomputed from the sources, so it can be rebuilt or discarded rather than tended; only the part that can't be rebuilt is kept safe — saved answers by the data source that holds them, confirmations by the Discovery Layer itself. "Low maintenance" describes the stored data, not ongoing cost: recomputation is recurring compute, and the skills behind it must be owned and kept current (see <u>Strategy</u>).
 - **Loosely coupled** — keep the pieces independent so any one — a store, a source, a tool — can be swapped without rewriting the rest, and no single vendor becomes hard to leave.
 - **Intuitive** — lean on standards (e.g., MCP) and common patterns rather than bespoke mechanisms, so people and tools pick it up quickly.
 - **Flexible** — adaptable to a wide range of questions, data, and tools: many small, specialized skills instead of one rigid system.
