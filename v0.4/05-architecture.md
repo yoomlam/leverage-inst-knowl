@@ -23,7 +23,7 @@ A **computed layer derived from DSs** — a *logical role, not a single store*. 
 
 ### Tags that travel with a DL output
 Realized via whatever the store supports (a column, a label, a page property) — no bespoke system.
-- **Provenance/verification:** `ai-generated` (default), `human-created`, `human-verified`, `discovery-layer` — the marker also lets a skill recognize a DS-stored artifact as DL and register it in the Catalog automatically.
+- **Provenance/verification:** `ai-generated` (default), `human-created`, `human-verified`, `discovery-layer` — the marker also lets a skill recognize a DS-stored artifact as DL and register it in the Catalog automatically. A **DL-creation skill applies `discovery-layer` to the output it authors**; a human-authored saved synthesis (<u>Strategy</u> Level 4) is *not* tagged — it's a person's artifact, discoverable through its explicitly registered Catalog pointer.
 - **Lifecycle/trust:** content freshness/staleness, obsolescence, trust/confirmation signal.
 - **Classification:** entry type + subject (Catalog keys), category (also an ACL-mapping input).
 - **Access control:** propagated ACL metadata (a *hint* only), sensitivity.
@@ -43,7 +43,7 @@ DL's directory — a "yellow pages" you consult to find *where* an output lives 
 
 **Why it's needed:** DL deliberately spreads outputs across many stores. Without one known starting point, every tool would hard-code the topology or fan out and search every store on each query — the exact repetitive searching DL exists to eliminate. The Catalog gives consumers **one lookup**, decoupled from storage. It is what makes discovery *scale*, not a hard prerequisite for any single output: the system still works without it — a consumer falls back to skill routing or a bounded fan-out — so an un-registered output (e.g., a freshly saved answer) is still reachable, just not in one lookup. That is why <u>Strategy</u> can treat it as essential at scale yet optional for an individual saved answer.
 
-**What qualifies for registration.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a saved synthesis (<u>Strategy</u> Level 4) when the user opts in. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
+**What qualifies for registration.** Registration is **per `(entry_type, subject)` key**, not per artifact. An output qualifies only when it is **externally addressable** (answers a stable key a *non-producer* would look up), **meant to be discovered** (not a producer's private intermediate), and **worth a stable pointer** (a durable address surviving re-derivation). The **producer decides**: a skill registers what its author designated; a saved synthesis (<u>Strategy</u> Level 4) only if the user opts in to registration as a step separate from saving the artifact. The rule: *register a reusable answer, keyed by a stable `(entry_type, subject)`, that consumers beyond the producer should discover.*
 
 **Granularity — top-level entry, not every sub-location.** A row points at the **entry point** for a subject — typically a top-level summary or landing output — not at every finer-grained piece beneath it. When the answer to a specific question lives in material *within* that entry (a section, a child page, a sub-record), reaching it is the **Query skill's** navigation job, not a separate Catalog row: the skill carries the question-type know-how for where such detail sits (<u>Strategy</u> §1.3). This keeps the Catalog small and stable — one durable pointer per subject — instead of bloating it with sub-rows that drift as a source reorganizes.
 
@@ -95,14 +95,14 @@ A `location` can break: a DS page is deleted, a dataset is dropped, a doc is mov
 ```
 DSs → DL-creation skill (one of many, per source/team) → DL (Catalog + chosen store, via MCP)
 AI tools → Query skill (one of many, per topic) → known DL output directly, else read Catalog → follow pointers
-Saved synthesis → user writes artifact (own SSO) → service account registers the Catalog pointer (human-owned row)
+Saved synthesis → user writes artifact (own SSO); if the user separately opts to register → service account writes the Catalog pointer (human-owned row)
 Confirmations → service-fronted store (via MCP)
 Durable updates → DSs
 ```
 
 - **Creation & governance** — knowledge created/corrected/summarized in DSs; access via Google SSO + Groups (see <u>Access Control</u>).
 - **DL population & refresh** — AI-assisted content via scheduled/manual skills that compute outputs, write each to its store via MCP, register locations in the Catalog, and run staleness checks on referenced DS content *and* their own pointers.
-- **Saved synthesis** — when a user persists a synthesized answer (<u>Strategy</u> Level 4), the write **splits**: the user authors the artifact under their own SSO, then a service account registers the Catalog pointer with the user as `created_by` and `row_provenance = 'human'`. Because it's a human-saved artifact rather than a skill's computed output, no skill re-derives it — recovery is revert.
+- **Saved synthesis** — when a user persists a synthesized answer (<u>Strategy</u> Level 4), the user authors the artifact under their own SSO. **Registration is a separate opt-in**, not part of the save: only if the user chooses to promote the artifact to one-lookup discovery does a service account write a Catalog pointer with the user as `created_by` and `row_provenance = 'human'`. Either way it's a human-saved artifact rather than a skill's computed output, so it carries no `discovery-layer` tag (that marks skill output) and no skill re-derives it. Unregistered, it stays reachable by skill routing or fan-out.
 - **Query & retrieval** — AI tools query DSs and DL via MCP under a verified SSO token, guided by one of many topic-specialized query skills. A skill that knows where its topic lives points straight there, skipping the Catalog; otherwise the agent reads the Catalog, then follows pointers.
 - **Feedback & source updates** — users vouch whether a cited source was right or wrong (a signed, attributed, revertible signal); a *wrong content* negative vote also routes to the §6 correction path. At query time a flagged source is demoted with its reason shown, never hidden. Permanent updates always go to DSs.
 
@@ -120,7 +120,7 @@ All updates propagate/assign ACL metadata and register location in the Catalog.
 - **Corrections** → a DS (guide the user to fix the underlying record).
 - **Human-verified summaries** → a DS (DL may index/point to them).
 - **AI-generated artifacts in DSs** → computed, human-readable output stored where people read it; provenance-marked, registered in the Catalog, written under a clear identity. Marked as `ai-generated`. Unverified until a human reviews it, becoming a `human-verified` DL output under that person's identity.
-- **Persisted synthesis** → a user-saved synthesis stored as a new `human-created` DL output, under the **user's own SSO**, born `human-created`; durable and not recomputable (<u>Strategy</u>, Level 4).
+- **Persisted synthesis** → a user-saved synthesis stored as a new `human-created` DL output, under the **user's own SSO**, born `human-created`; durable, not recomputable, and **untagged** (no `discovery-layer` marker, which is reserved for skill output) (<u>Strategy</u>, Level 4).
 - **Confirmations** → non-recomputable, signed (right/wrong) data; attributed; stored in the service-fronted store (via MCP), recovered by backup. A *wrong content* negative vote additionally drives a correction to the underlying DS record (the *new data*/*corrections* rows above), but the signal itself is never canonical knowledge.
 - **The Catalog** → DL topology, written by the skill service account only; reads stay open.
 - **DL writes** → only computed data, the Catalog, and confirmation signals. Never canonical new knowledge, human corrections, or human-verified summaries.
