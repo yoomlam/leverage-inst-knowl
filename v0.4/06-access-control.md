@@ -37,6 +37,8 @@ A cross-DS aggregation has no single source ACL. Rather than computing a most-re
 
 A genuinely cross-tier output is served either by an **admin-provisioned audience group** whose membership *is* the intended union, or — absent a standing audience — by storing **pointers/instructions** directing permitted users to recompute under their own SSO at query time. The skill never computes an intersection. Before writing, the skill asserts the named group is no broader than every input source's audience; on failure the output stays default-deny.
 
+**User-saved syntheses (Level 4) differ.** A person, not a skill, authors the artifact, so there is no skill author to name the group ahead of time. The **saving user sets the audience** under their own SSO and is **responsible** for choosing one no broader than the sources the synthesis drew on (**default-deny** if they specify nothing). The skill may surface the sources' restrictions to inform that choice, but it never sets access itself. The cross-tier caution above still applies — the user makes the call.
+
 ## Three sharing states
 
 Every DL output carries one of:
