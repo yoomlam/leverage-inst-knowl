@@ -1,9 +1,11 @@
 import logging
 
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from .auth import Verifier
+from .auth import Authenticator
 from .catalog import (
     CatalogEntry,
     ListResult,
@@ -32,16 +34,24 @@ logger = logging.getLogger("lik_mcp.server")
 
 def build_server(
     db: Database,
-    verifier: Verifier,
+    authenticator: Authenticator,
     resolver: CitationResolver,
     host: str = "127.0.0.1",
     port: int = 8000,
     allowed_hosts: list[str] | None = None,
+    token_verifier: TokenVerifier | None = None,
+    auth_settings: AuthSettings | None = None,
 ) -> FastMCP:
     """Construct the MCP service. Dependencies are injected so tests can substitute a
-    stub verifier / resolver and a test database. host/port apply only to the
+    stub authenticator / resolver and a test database. host/port apply only to the
     streamable-http transport. The service exposes ONLY the intent-named tools below —
-    there is no generic SQL tool."""
+    there is no generic SQL tool.
+
+    When `token_verifier` and `auth_settings` are supplied (real deployment), the SDK's
+    bearer middleware validates the Authorization header before any tool runs and stores
+    the verified caller on the request context, which the injected `authenticator` reads.
+    Omit them (local/test) and no HTTP auth is enforced; the stub authenticator provides
+    the identity instead."""
 
     # The HTTP transport must bind 0.0.0.0 inside a container to be reachable through a
     # published port, so loopback-binding can't be the DNS-rebinding guard. Restrict the
@@ -52,13 +62,21 @@ def build_server(
         enable_dns_rebinding_protection=True,
         allowed_hosts=allowed_hosts or ["localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*"],
     )
-    mcp = FastMCP("lik-mcp", host=host, port=port, transport_security=transport_security)
+    mcp = FastMCP(
+        "lik-mcp",
+        host=host,
+        port=port,
+        transport_security=transport_security,
+        token_verifier=token_verifier,
+        auth=auth_settings,
+    )
 
-    def _authorize(tool: str, token: str | None):
-        """Verify the caller and log the outcome. Logs the resolved caller email on
-        success and the reason on denial — never the token itself."""
+    def _authorize(tool: str):
+        """Resolve the verified caller and log the outcome. The caller comes from the
+        verified bearer token (never a self-asserted argument). Logs the resolved email
+        on success and the reason on denial — never the token itself."""
         try:
-            identity = verifier.verify(token)
+            identity = authenticator.resolve()
         except Exception as exc:
             logger.warning("tool=%s authorization denied: %s", tool, exc)
             raise
@@ -66,7 +84,7 @@ def build_server(
         return identity
 
     @mcp.tool(name="register_catalog_entry")
-    def _register_catalog_entry(entry: CatalogEntry, token: str | None = None) -> RegisterResult:
+    def _register_catalog_entry(entry: CatalogEntry) -> RegisterResult:
         """Register a Catalog row. A skill upserts its own row on (entry_type, subject,
         computed_by); a human-owned row inserts a new pointer, so duplicates on a key
         coexist as ranked rows. Service-only writer."""
@@ -74,7 +92,7 @@ def build_server(
             "tool=register_catalog_entry request entry_type=%r subject=%r store_kind=%r computed_by=%r",
             entry.entry_type, entry.subject, entry.store_kind, entry.computed_by,
         )
-        identity = _authorize("register_catalog_entry", token)
+        identity = _authorize("register_catalog_entry")
         result = register_catalog_entry(db, entry, updated_by=identity.email)
         logger.info(
             "tool=register_catalog_entry result status=%s id=%d entry_type=%r subject=%r",
@@ -83,24 +101,24 @@ def build_server(
         return result
 
     @mcp.tool(name="lookup_catalog_entry")
-    def _lookup_catalog_entry(entry_type: str, subject: str, token: str | None = None) -> LookupResult:
+    def _lookup_catalog_entry(entry_type: str, subject: str) -> LookupResult:
         """Resolve (entry_type, subject) -> all matching pointers, ranked best-first; the top
         row is the default entry point. A key may return several (duplicates from independent
         human saves). Empty result = a cache miss, never an error."""
         logger.info(
             "tool=lookup_catalog_entry request entry_type=%r subject=%r", entry_type, subject
         )
-        _authorize("lookup_catalog_entry", token)
+        _authorize("lookup_catalog_entry")
         result = lookup_catalog_entry(db, entry_type, subject)
         logger.info("tool=lookup_catalog_entry result count=%d", result.count)
         return result
 
     @mcp.tool(name="list_catalog_entries")
-    def _list_catalog_entries(entry_type: str, token: str | None = None) -> ListResult:
+    def _list_catalog_entries(entry_type: str) -> ListResult:
         """List every Catalog row of one entry_type (e.g. 'index'). Bounded by the
         discovery key — not a generic query. Empty type = empty list, never an error."""
         logger.info("tool=list_catalog_entries request entry_type=%r", entry_type)
-        _authorize("list_catalog_entries", token)
+        _authorize("list_catalog_entries")
         result = list_catalog_entries(db, entry_type)
         logger.info("tool=list_catalog_entries result count=%d", result.count)
         return result
@@ -111,7 +129,6 @@ def build_server(
         query: str,
         category: str | None = None,
         limit: int = 10,
-        token: str | None = None,
     ) -> SearchResult:
         """Partial + fuzzy search on `subject` within one entry_type. Returns the top
         `limit` rows ranked by similarity — a bounded candidate set for placing a fuzzy
@@ -121,7 +138,7 @@ def build_server(
             "tool=search_catalog_entries request entry_type=%r query=%r category=%r limit=%d",
             entry_type, query, category, limit,
         )
-        _authorize("search_catalog_entries", token)
+        _authorize("search_catalog_entries")
         result = search_catalog_entries(db, entry_type, query, category=category, limit=limit)
         logger.info("tool=search_catalog_entries result count=%d", result.count)
         return result
@@ -132,7 +149,6 @@ def build_server(
         vote: str = "up",
         reason: str | None = None,
         comment: str | None = None,
-        token: str | None = None,
     ) -> ConfirmResult:
         """Record a user's signed vote on a cited source. `vote` is 'up' (the source was
         right) or 'down' (wrong); a down vote names a `reason` ('bad-retrieval' |
@@ -142,7 +158,7 @@ def build_server(
             "tool=confirm_source request store_kind=%r location=%r locator=%r source_state=%r vote=%r reason=%r",
             citation.store_kind, citation.location, citation.locator, citation.source_state, vote, reason,
         )
-        identity = _authorize("confirm_source", token)
+        identity = _authorize("confirm_source")
         result = confirm_source(db, citation, identity.email, resolver, vote, reason, comment)
         logger.info("tool=confirm_source result %s", result.model_dump())
         return result
@@ -151,7 +167,6 @@ def build_server(
     def _read_confirmations(
         citation: Citation,
         current_source_state: str | None = None,
-        token: str | None = None,
     ) -> ConfirmationsResult:
         """Return accumulated confirmations for one cited source. Pass `current_source_state`
         (the source's live content-state marker) to flag each row's `edited_since`; omit it
@@ -161,7 +176,7 @@ def build_server(
             "tool=read_confirmations request store_kind=%r location=%r locator=%r current_source_state=%r",
             citation.store_kind, citation.location, citation.locator, current_source_state,
         )
-        _authorize("read_confirmations", token)
+        _authorize("read_confirmations")
         result = read_confirmations(db, citation, current_source_state)
         logger.info("tool=read_confirmations result count=%d", result.count)
         return result

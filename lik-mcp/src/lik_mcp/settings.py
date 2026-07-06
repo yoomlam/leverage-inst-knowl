@@ -39,9 +39,30 @@ class Settings(BaseSettings):
     # widens it via env (e.g. the local container adds 0.0.0.0:* since clients point there).
     http_allowed_hosts: str = "localhost,localhost:*,127.0.0.1,127.0.0.1:*"
 
+    # --- OAuth / identity (real deployments; env not in local/test) ---------------
+    # The Google OAuth client id the agent's tokens are minted for. GoogleOIDCVerifier
+    # requires an incoming token's audience to equal this, so a token issued for another
+    # app can't be replayed here. Required outside local/test; empty there.
+    oauth_client_id: str = ""
+    # Advertised to MCP clients as this resource server's authorization server (OAuth
+    # Protected Resource Metadata). Google is the issuer.
+    oauth_issuer_url: str = "https://accounts.google.com"
+    # Where Google's opaque access tokens are validated. Overridable for testing.
+    oauth_tokeninfo_url: str = "https://www.googleapis.com/oauth2/v3/tokeninfo"
+    # This MCP server's own public URL — the resource identifier clients use to discover
+    # its Protected Resource Metadata. Required outside local/test.
+    resource_server_url: str = ""
+    # Scopes a token must carry. The OAuth consent must request these or Google won't
+    # return an email to authorize on. Comma-separated.
+    oauth_required_scopes: str = "openid,email"
+
     @property
     def allowed_hosts(self) -> list[str]:
         return [h.strip() for h in self.http_allowed_hosts.split(",") if h.strip()]
+
+    @property
+    def required_scopes(self) -> list[str]:
+        return [s.strip() for s in self.oauth_required_scopes.split(",") if s.strip()]
 
     @property
     def conninfo(self) -> str:

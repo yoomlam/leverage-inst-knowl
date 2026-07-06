@@ -2,7 +2,7 @@ import pathlib
 
 import pytest
 
-from lik_mcp.auth import StubVerifier
+from lik_mcp.auth import StubAuthenticator
 from lik_mcp.citations import ShapeResolver
 from lik_mcp.db import Database
 from lik_mcp.server import build_server
@@ -55,8 +55,8 @@ def clean(db, settings):
 
 
 @pytest.fixture
-def verifier():
-    return StubVerifier()
+def authenticator():
+    return StubAuthenticator()
 
 
 @pytest.fixture
@@ -65,5 +65,5 @@ def resolver():
 
 
 @pytest.fixture
-def server(db, verifier, resolver):
-    return build_server(db, verifier, resolver)
+def server(db, authenticator, resolver):
+    return build_server(db, authenticator, resolver)

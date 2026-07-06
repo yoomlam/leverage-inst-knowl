@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .venv/
+
+# Local, ephemeral compose overrides (ngrok URL, OAuth client id)
+docker-compose.override.yml
