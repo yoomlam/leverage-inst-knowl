@@ -15,6 +15,16 @@
     return el;
   }
 
+  // Render accumulated markdown to sanitized HTML; fall back to plain text if the CDN
+  // libs didn't load (offline / blocked).
+  function renderMarkdown(el, raw) {
+    if (window.marked && window.DOMPurify) {
+      el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(raw));
+    } else {
+      el.textContent = raw;
+    }
+  }
+
   composer.addEventListener("submit", function (e) {
     e.preventDefault();
     const message = input.value.trim();
@@ -29,8 +39,9 @@
     source.onmessage = function (ev) {
       const event = JSON.parse(ev.data);
       if (event.type === "text") {
-        if (!assistant) assistant = bubble("assistant", "");
-        assistant.textContent += event.text;
+        if (!assistant) { assistant = bubble("assistant", ""); assistant._raw = ""; }
+        assistant._raw += event.text;
+        renderMarkdown(assistant, assistant._raw);
       } else if (event.type === "tool_use") {
         bubble("tool", "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
       } else if (event.type === "error") {

@@ -26,5 +26,9 @@
     <button class="btn" type="submit">Send</button>
   </form>
 
+  <!-- Markdown rendering for agent replies. DOMPurify sanitizes because tool results can
+       echo arbitrary content from the connected sources (Confluence/Jira). -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
   <script src="/static/chat.js"></script>
 {% endblock %}
