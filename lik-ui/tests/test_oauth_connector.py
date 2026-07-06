@@ -80,6 +80,31 @@ async def test_discover_falls_back_to_wellknown_prm(store):
     assert calls.get(("GET", PRM_HINT_URL), 0) >= 1  # path-suffixed well-known was tried
 
 
+async def test_discover_falls_back_to_as_metadata_at_origin(store):
+    # Atlassian-style: no protected-resource metadata at all (401 has no hint, well-known
+    # PRM 404s), but AS metadata is served directly at the MCP origin.
+    origin_as = "https://mcp.example.com/.well-known/oauth-authorization-server"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url, method = str(request.url), request.method
+        if url == MCP_URL and method == "GET":
+            return httpx.Response(401)  # no resource_metadata hint
+        if url == origin_as:
+            return httpx.Response(200, json={
+                "issuer": "https://cf.mcp.example.com",
+                "authorization_endpoint": "https://mcp.example.com/authorize",
+                "token_endpoint": "https://mcp.example.com/token",
+                "registration_endpoint": "https://mcp.example.com/register",
+                "scopes_supported": ["offline_access"],
+            })
+        return httpx.Response(404)
+
+    conn = _connector(store, handler)
+    d = await conn.discover(MCP_URL)
+    assert d.token_endpoint == "https://mcp.example.com/token"
+    assert d.registration_endpoint == "https://mcp.example.com/register"
+
+
 async def test_discover_raises_when_metadata_unreachable(store):
     handler, _ = build_handler(www_auth_hint=False, mcp_status=404)
 

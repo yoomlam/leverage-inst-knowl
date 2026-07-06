@@ -125,12 +125,15 @@ class OAuthConnector:
     # --- discovery -------------------------------------------------------------
     async def discover(self, mcp_url: str) -> Discovery:
         async with self._client_factory() as client:
-            prm = await self._fetch_protected_resource_metadata(client, mcp_url)
-            servers = prm.get("authorization_servers") or []
-            if not servers:
-                raise ConnectorError(f"No authorization_servers advertised for {mcp_url}")
-            issuer = servers[0]
-            meta = await self._fetch_as_metadata(client, issuer)
+            issuer = await self._discover_issuer(client, mcp_url)
+            if issuer:
+                # Standard RFC 9728 path: protected-resource metadata named an AS.
+                meta = await self._fetch_as_metadata(client, issuer)
+            else:
+                # Fallback: no protected-resource metadata (e.g. Atlassian). Many MCP
+                # servers co-locate their authorization server, serving AS metadata at
+                # their own origin's well-known path.
+                meta = await self._fetch_as_metadata(client, self._origin(mcp_url))
         try:
             return Discovery(
                 issuer=meta.get("issuer", issuer),
@@ -142,7 +145,14 @@ class OAuthConnector:
         except KeyError as exc:
             raise ConnectorError(f"Authorization-server metadata missing {exc} for {issuer}") from exc
 
-    async def _fetch_protected_resource_metadata(self, client: httpx.AsyncClient, mcp_url: str) -> dict:
+    async def _discover_issuer(self, client: httpx.AsyncClient, mcp_url: str) -> str | None:
+        """Return the first authorization server from RFC 9728 protected-resource metadata,
+        or None if the server exposes no PRM (then the caller falls back to the origin)."""
+        prm = await self._try_prm(client, mcp_url)
+        servers = (prm or {}).get("authorization_servers") or []
+        return servers[0] if servers else None
+
+    async def _try_prm(self, client: httpx.AsyncClient, mcp_url: str) -> dict | None:
         # Preferred: the 401 challenge names the metadata document directly.
         try:
             resp = await client.get(mcp_url)
@@ -157,7 +167,12 @@ class OAuthConnector:
                 return await self._get_json(client, url)
             except httpx.HTTPError:
                 continue
-        raise ConnectorError(f"Could not discover protected-resource metadata for {mcp_url}")
+        return None
+
+    @staticmethod
+    def _origin(url: str) -> str:
+        u = httpx.URL(url)
+        return f"{u.scheme}://{u.host}" + (f":{u.port}" if u.port else "")
 
     @staticmethod
     def _prm_candidates(mcp_url: str) -> list[str]:
