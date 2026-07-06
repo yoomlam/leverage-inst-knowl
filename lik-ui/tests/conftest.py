@@ -4,23 +4,55 @@ The DB-name guard refuses to run the suite against any database whose name does 
 in ``_test`` — the suite truncates tables, so pointing it at a real DB would wipe data.
 """
 
-import os
+import pathlib
 
 import pytest
 
+from lik_ui.db import Database, Store
 from lik_ui.settings import Settings
+
+INIT_SQL = pathlib.Path(__file__).resolve().parents[1] / "db" / "init.sql"
+
+_TABLES = "users, user_vaults, conversations, dcr_registrations"
 
 
 def pytest_configure(config):
-    db_name = os.environ.get("LIK_UI_DB_NAME", "likuidb_test")
-    if not db_name.endswith("_test"):
+    if not Settings().db_name.endswith("_test"):
         raise pytest.UsageError(
-            f"LIK_UI_DB_NAME={db_name!r} must end in '_test'. The suite truncates tables; "
-            "refusing to run against a non-test database."
+            f"LIK_UI_DB_NAME={Settings().db_name!r} must end in '_test'. The suite truncates "
+            "tables; refusing to run against a non-test database."
         )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def settings() -> Settings:
-    """Default local settings; individual tests override fields as needed."""
     return Settings(env="test")
+
+
+@pytest.fixture(scope="session")
+def db(settings):
+    """Connect to the test Postgres and apply the idempotent schema. Skips the suite
+    (rather than erroring) when no DB is reachable, with a hint to start Docker."""
+    try:
+        database = Database(settings.conninfo)
+        with database.connection() as conn:
+            conn.execute(INIT_SQL.read_text())
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001 - any connection/setup failure -> skip
+        pytest.skip(f"Test Postgres not reachable ({exc}). Run `docker compose up -d db` first.")
+    yield database
+    database.close()
+
+
+@pytest.fixture(autouse=True)
+def clean(db, settings):
+    assert settings.db_name.endswith("_test")  # defense in depth
+    with db.connection() as conn:
+        conn.execute(f"TRUNCATE {_TABLES} RESTART IDENTITY CASCADE")
+        conn.commit()
+    yield
+
+
+@pytest.fixture
+def store(db) -> Store:
+    return Store(db)

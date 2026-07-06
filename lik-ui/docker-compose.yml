@@ -2,16 +2,18 @@ services:
   db:
     image: postgres:18.4
     environment:
-      POSTGRES_DB: likuidb_local
+      POSTGRES_DB: likuidb_test   # default DB is the pytest target (it TRUNCATEs)
       POSTGRES_USER: lik
       POSTGRES_PASSWORD: lik
     ports:
       - "5433:5432"  # lik-mcp uses 5432 locally; keep them distinct for side-by-side
     volumes:
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # Also create the persistent likuidb_local (manual testing) on first volume init.
+      - ./db/init-local.sh:/docker-entrypoint-initdb.d/02-init-local.sh:ro
       - likuidata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lik -d likuidb_local"]
+      test: ["CMD-SHELL", "pg_isready -U lik -d likuidb_test"]
       interval: 5s
       timeout: 3s
       retries: 10

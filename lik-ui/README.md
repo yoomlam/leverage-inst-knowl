@@ -38,10 +38,11 @@ docker compose up
 
 ```
 docker compose up -d db
-uv run pytest
+LIK_UI_DB_PORT=5433 uv run pytest   # compose publishes Postgres on 5433
 ```
 
-The suite refuses to run unless `LIK_UI_DB_NAME` ends in `_test` (it truncates tables).
+The suite refuses to run unless `LIK_UI_DB_NAME` ends in `_test` (it truncates tables),
+and it targets the compose default database `likuidb_test`.
 
 ## Configuration
 

@@ -1,0 +1,39 @@
+-- lik-ui's own store. Idempotent: safe to run on an empty DB via the Docker entrypoint
+-- or by hand (`psql "$CONNINFO" -f db/init.sql`). Drop-and-recreate for schema changes
+-- (drafting mode, no migrations).
+
+-- App users, keyed by their verified Google email (the app-login identity claim).
+CREATE TABLE IF NOT EXISTS users (
+    id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email       text        NOT NULL UNIQUE,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- One credential vault per user (the user -> VAULT_ID mapping). The vault holds the
+-- per-source MCP credentials this user has connected.
+CREATE TABLE IF NOT EXISTS user_vaults (
+    user_id     bigint      NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    vault_id    text        NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- One managed session per conversation; a user resumes by reopening a stored session_id.
+CREATE TABLE IF NOT EXISTS conversations (
+    id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id     bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    agent_id    text        NOT NULL,
+    session_id  text        NOT NULL,
+    title       text,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS conversations_user_idx ON conversations (user_id, created_at DESC);
+
+-- App-level dynamic client registrations, keyed by the authorization server's issuer.
+-- Registered once against a DCR-capable AS (e.g. Atlassian) and reused across users.
+CREATE TABLE IF NOT EXISTS dcr_registrations (
+    issuer          text        PRIMARY KEY,
+    client_id       text        NOT NULL,
+    client_secret   text,
+    metadata        jsonb       NOT NULL DEFAULT '{}'::jsonb,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
