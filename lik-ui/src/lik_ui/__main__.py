@@ -7,12 +7,28 @@ so the transport selection and the server share one config (mirrors lik-mcp).
 import uvicorn
 
 from .app import build_app
+from .app_auth import GoogleOidcClient
+from .db import Database, Store
 from .settings import Settings
+from .vault import build_vault_client
+
+
+def build_production_app(settings: Settings):
+    """Construct the app with real collaborators wired from settings."""
+    store = Store(Database(settings.conninfo))
+    app_oidc = GoogleOidcClient(
+        client_id=settings.app_oauth_client_id,
+        client_secret=settings.app_oauth_client_secret,
+        discovery_url=settings.app_oidc_discovery_url,
+        redirect_uri=f"{settings.app_base_url}/auth/callback",
+    )
+    vault_client = build_vault_client(settings)
+    return build_app(settings, store=store, app_oidc=app_oidc, vault_client=vault_client)
 
 
 def main() -> None:
     settings = Settings()
-    app = build_app(settings)
+    app = build_production_app(settings)
     uvicorn.run(app, host=settings.http_host, port=settings.http_port)
 
 

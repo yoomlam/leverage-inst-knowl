@@ -23,12 +23,23 @@ STATIC_DIR = _PKG_DIR / "static"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-def build_app(settings: Settings | None = None) -> FastAPI:
+def build_app(
+    settings: Settings | None = None,
+    *,
+    store=None,
+    app_oidc=None,
+    vault_client=None,
+) -> FastAPI:
+    """Build the FastAPI app. Collaborators (store, OIDC client, vault client) are
+    injected so tests can substitute fakes; ``__main__`` wires the real ones."""
     settings = settings or Settings()
     settings.require_production_config()
 
     app = FastAPI(title="lik-ui")
     app.state.settings = settings
+    app.state.store = store
+    app.state.app_oidc = app_oidc
+    app.state.vault_client = vault_client
 
     # Session cookie holds the signed app identity + transient OAuth flow state. Outside
     # local/test the secret is required (enforced by require_production_config above); the
@@ -46,5 +57,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/healthz")
     def healthz() -> JSONResponse:
         return JSONResponse({"status": "ok"})
+
+    # Register feature routers. Imported here (not at module top) to keep the import graph
+    # acyclic — these modules import `templates` from this module.
+    from .app_auth import register_auth_routes
+
+    register_auth_routes(app)
 
     return app
