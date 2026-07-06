@@ -130,14 +130,20 @@ def register_auth_routes(app: FastAPI) -> None:
         return RedirectResponse(url, status_code=303)
 
     @app.get("/auth/callback")
-    async def auth_callback(request: Request, code: str = "", state: str = ""):
+    async def auth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
         saved = request.session.get("oauth_login") or {}
+        # Google redirects here with ?error=access_denied (no code) when the user declines.
+        if error:
+            return HTMLResponse(f"Login was cancelled or failed ({error}).", status_code=400)
         if not state or state != saved.get("state"):
             return HTMLResponse("Login state mismatch. Please try again.", status_code=400)
 
         oidc: GoogleOidcClient = request.app.state.app_oidc
-        tokens = await oidc.exchange_code(code)
-        userinfo = await oidc.fetch_userinfo(tokens["access_token"])
+        try:
+            tokens = await oidc.exchange_code(code)
+            userinfo = await oidc.fetch_userinfo(tokens["access_token"])
+        except (httpx.HTTPError, KeyError) as exc:
+            return HTMLResponse(f"Login failed: {exc}", status_code=400)
         if not _email_verified(userinfo) or not userinfo.get("email"):
             return HTMLResponse("Google account has no verified email.", status_code=403)
 

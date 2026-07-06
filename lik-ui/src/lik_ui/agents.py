@@ -62,12 +62,12 @@ def register_agent_routes(app) -> None:
         if not agent:
             return HTMLResponse("Unknown agent.", status_code=404)
 
-        vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
         try:
+            vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
             conns = resolve_connections(
                 request.app.state.agents_client, request.app.state.vault_client, agent_id, vault_id
             )
-        except Exception as exc:  # noqa: BLE001 - surface SDK/agent errors as a page, not a 500
+        except Exception as exc:  # noqa: BLE001 - surface SDK/agent/vault errors as a page, not a 500
             return HTMLResponse(f"Could not load the agent's required connections: {exc}", status_code=502)
 
         return templates.TemplateResponse(request, "connections.html", {"agent": agent, "connections": conns})

@@ -35,7 +35,7 @@ def test_connect_flow_deposits_credential(db):
     client = TestClient(_app(db, vc), follow_redirects=False)
     _login(client)
 
-    r = client.get(f"/connections/connect?mcp_url={MCP_URL}&label=lik-mcp")
+    r = client.get(f"/connections/connect?mcp_url={MCP_URL}&agent_id=agent_1&label=lik-mcp")
     assert r.status_code == 303
     auth_url = r.headers["location"]
     assert "code_challenge" in auth_url and "resource" in auth_url
@@ -43,7 +43,7 @@ def test_connect_flow_deposits_credential(db):
 
     r2 = client.get(f"/connections/callback?code=abc&state={state}&iss={ISSUER}")
     assert r2.status_code == 303
-    assert r2.headers["location"] == "/connections"
+    assert r2.headers["location"] == "/connections?agent_id=agent_1"  # agent_id carried through
 
     assert len(vc.credentials) == 1
     cred = vc.credentials[0]

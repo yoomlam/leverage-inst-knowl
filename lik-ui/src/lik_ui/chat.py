@@ -85,10 +85,13 @@ def register_chat_routes(app) -> None:
         if not agent:
             return HTMLResponse("Unknown agent.", status_code=404)
 
-        vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
-        session_id = request.app.state.sessions_client.create_session(
-            agent.agent_id, agent.environment_id, [vault_id]
-        )
+        try:
+            vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
+            session_id = request.app.state.sessions_client.create_session(
+                agent.agent_id, agent.environment_id, [vault_id]
+            )
+        except Exception as exc:  # noqa: BLE001 - surface session/vault failures as a page, not a 500
+            return HTMLResponse(f"Could not start a session: {exc}", status_code=502)
         conv = request.app.state.store.create_conversation(user["id"], agent.agent_id, session_id)
         return RedirectResponse(f"/chat/{conv['id']}", status_code=303)
 

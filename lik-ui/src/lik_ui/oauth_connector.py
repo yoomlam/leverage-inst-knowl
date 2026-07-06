@@ -41,7 +41,7 @@ def register_connection_routes(app) -> None:
     from .vault import ensure_user_vault
 
     @app.get("/connections/connect")
-    async def connect(request: Request, mcp_url: str, label: str = ""):
+    async def connect(request: Request, mcp_url: str, agent_id: str = "", label: str = ""):
         require_user(request)
         connector: OAuthConnector = request.app.state.connector
         try:
@@ -52,12 +52,17 @@ def register_connection_routes(app) -> None:
 
         state = secrets.token_urlsafe(32)
         verifier, challenge = connector.make_pkce()
+        # Stash the discovered endpoints (no secrets) so the callback need not re-discover.
+        # ClientCredentials are NOT stashed — they carry a client secret and the session
+        # cookie is signed, not encrypted; the callback re-acquires them cheaply (DB/local).
         request.session["oauth_connect"] = {
             "state": state,
             "verifier": verifier,
             "mcp_url": mcp_url,
             "issuer": discovery.issuer,
             "label": label or mcp_url,
+            "agent_id": agent_id,
+            "discovery": discovery.model_dump(),
         }
         return RedirectResponse(
             connector.authorization_url(discovery, creds, state, challenge, mcp_url), status_code=303
@@ -75,19 +80,23 @@ def register_connection_routes(app) -> None:
 
         mcp_url = pending["mcp_url"]
         connector: OAuthConnector = request.app.state.connector
+        # Reuse the endpoints discovered at connect time; re-acquire the client (cheap) and
+        # deposit. Guard the whole exchange+deposit so a malformed token response or a
+        # misconfigured (e.g. missing) vault client surfaces as a clean failure, not a 500.
         try:
-            discovery = await connector.discover(mcp_url)
+            discovery = Discovery(**pending["discovery"])
             creds = await connector.acquire_client(mcp_url, discovery)
             tokens = await connector.exchange_code(discovery, creds, code, pending["verifier"], mcp_url)
-        except ConnectorError as exc:
+            vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
+            connector.deposit(
+                request.app.state.vault_client, vault_id, mcp_url, discovery, creds, tokens, pending["label"]
+            )
+        except (ConnectorError, KeyError, ValueError, TypeError, AttributeError) as exc:
             return HTMLResponse(f"Connection failed: {exc}", status_code=502)
 
-        vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
-        connector.deposit(
-            request.app.state.vault_client, vault_id, mcp_url, discovery, creds, tokens, pending["label"]
-        )
         request.session.pop("oauth_connect", None)
-        return RedirectResponse("/connections", status_code=303)
+        agent_id = pending.get("agent_id")
+        return RedirectResponse(f"/connections?agent_id={agent_id}" if agent_id else "/", status_code=303)
 
 
 class Discovery(BaseModel):
@@ -155,11 +164,14 @@ class OAuthConnector:
         u = httpx.URL(mcp_url)
         origin = f"{u.scheme}://{u.host}" + (f":{u.port}" if u.port else "")
         path = u.path.rstrip("/")
-        return [
+        candidates = [
             f"{origin}/.well-known/oauth-protected-resource{path}",
             f"{origin}/.well-known/oauth-protected-resource",
             f"{normalize_url(mcp_url)}/.well-known/oauth-protected-resource",
         ]
+        # De-duplicate (empty/trailing-slash paths make several of these coincide) while
+        # preserving order, so fallback discovery doesn't re-fetch the same URL.
+        return list(dict.fromkeys(candidates))
 
     async def _fetch_as_metadata(self, client: httpx.AsyncClient, issuer: str) -> dict:
         base = normalize_url(issuer)
@@ -312,7 +324,7 @@ class OAuthConnector:
 
     @staticmethod
     def _expires_at(token_response: dict) -> str:
-        expires_in = int(token_response.get("expires_in", 3600))
+        expires_in = int(token_response.get("expires_in") or 3600)
         return (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
 
     def deposit(

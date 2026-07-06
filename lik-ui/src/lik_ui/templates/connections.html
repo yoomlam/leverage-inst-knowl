@@ -11,10 +11,10 @@
       <div>{{ c.url }}</div>
       {% if c.connected %}
         <span class="status-connected">✓ Connected</span>
-        <a class="btn secondary" href="/connections/connect?mcp_url={{ c.url | urlencode }}&label={{ c.name | urlencode }}">Reconnect</a>
+        <a class="btn secondary" href="/connections/connect?mcp_url={{ c.url | urlencode }}&agent_id={{ agent.agent_id | urlencode }}&label={{ c.name | urlencode }}">Reconnect</a>
       {% else %}
         <span class="status-missing">Not connected</span>
-        <a class="btn" href="/connections/connect?mcp_url={{ c.url | urlencode }}&label={{ c.name | urlencode }}">Connect</a>
+        <a class="btn" href="/connections/connect?mcp_url={{ c.url | urlencode }}&agent_id={{ agent.agent_id | urlencode }}&label={{ c.name | urlencode }}">Connect</a>
       {% endif %}
     </div>
   {% endfor %}
