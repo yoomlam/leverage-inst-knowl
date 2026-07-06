@@ -158,4 +158,6 @@ def register_auth_routes(app: FastAPI) -> None:
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
         user = require_user(request)
-        return templates.TemplateResponse(request, "home.html", {"user": user})
+        return templates.TemplateResponse(
+            request, "agents.html", {"user": user, "agents": request.app.state.settings.agents}
+        )

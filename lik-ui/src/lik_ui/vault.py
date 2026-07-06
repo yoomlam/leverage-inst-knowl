@@ -31,6 +31,10 @@ class VaultClient(Protocol):
         Returns the credential id."""
         ...
 
+    def list_credential_urls(self, vault_id: str) -> set[str]:
+        """Return the set of mcp_server_urls the vault currently holds credentials for."""
+        ...
+
 
 class AnthropicVaultClient:
     """Real ``VaultClient`` backed by the Anthropic SDK's Managed Agents vault API."""
@@ -66,6 +70,14 @@ class AnthropicVaultClient:
             vault_id=vault_id, display_name=display_name, auth=auth
         )
         return credential.id
+
+    def list_credential_urls(self, vault_id: str) -> set[str]:
+        urls: set[str] = set()
+        for cred in self._client.beta.vaults.credentials.list(vault_id=vault_id):
+            url = getattr(getattr(cred, "auth", None), "mcp_server_url", None)
+            if url:
+                urls.add(url)
+        return urls
 
 
 def build_vault_client(settings: Settings) -> VaultClient | None:

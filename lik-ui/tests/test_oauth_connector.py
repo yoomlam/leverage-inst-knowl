@@ -198,6 +198,9 @@ class RecordingVaultClient:
         )
         return "vcrd_1"
 
+    def list_credential_urls(self, vault_id) -> set[str]:
+        return {c["mcp_server_url"] for c in self.credentials}
+
 
 def test_deposit_keys_credential_by_exact_url_with_refresh_block(store):
     conn = OAuthConnector(store, {}, REDIRECT)

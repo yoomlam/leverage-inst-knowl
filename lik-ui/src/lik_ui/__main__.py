@@ -6,6 +6,7 @@ so the transport selection and the server share one config (mirrors lik-mcp).
 
 import uvicorn
 
+from .agents import build_agents_client
 from .app import build_app
 from .app_auth import GoogleOidcClient
 from .db import Database, Store
@@ -30,8 +31,14 @@ def build_production_app(settings: Settings):
         build_source_registry(settings),
         redirect_uri=f"{settings.app_base_url}/connections/callback",
     )
+    agents_client = build_agents_client(settings)
     return build_app(
-        settings, store=store, app_oidc=app_oidc, vault_client=vault_client, connector=connector
+        settings,
+        store=store,
+        app_oidc=app_oidc,
+        vault_client=vault_client,
+        connector=connector,
+        agents_client=agents_client,
     )
 
 

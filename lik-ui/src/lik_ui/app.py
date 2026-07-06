@@ -30,9 +30,10 @@ def build_app(
     app_oidc=None,
     vault_client=None,
     connector=None,
+    agents_client=None,
 ) -> FastAPI:
-    """Build the FastAPI app. Collaborators (store, OIDC client, vault client, connector)
-    are injected so tests can substitute fakes; ``__main__`` wires the real ones."""
+    """Build the FastAPI app. Collaborators (store, OIDC client, vault client, connector,
+    agents client) are injected so tests can substitute fakes; ``__main__`` wires real ones."""
     settings = settings or Settings()
     settings.require_production_config()
 
@@ -42,6 +43,7 @@ def build_app(
     app.state.app_oidc = app_oidc
     app.state.vault_client = vault_client
     app.state.connector = connector
+    app.state.agents_client = agents_client
 
     # Session cookie holds the signed app identity + transient OAuth flow state. Outside
     # local/test the secret is required (enforced by require_production_config above); the
@@ -62,10 +64,12 @@ def build_app(
 
     # Register feature routers. Imported here (not at module top) to keep the import graph
     # acyclic — these modules import `templates` from this module.
+    from .agents import register_agent_routes
     from .app_auth import register_auth_routes
     from .oauth_connector import register_connection_routes
 
     register_auth_routes(app)
     register_connection_routes(app)
+    register_agent_routes(app)
 
     return app

@@ -54,7 +54,7 @@ def test_successful_login_sets_session_and_provisions_vault(db):
     assert user is not None
     assert store.get_user_vault(user["id"]) == "vlt_1"
 
-    # Now authenticated: home renders with the user's email.
+    # Now authenticated: the home page (agent picker) renders with the user's email.
     home = client.get("/")
     assert home.status_code == 200
     assert "alice@navapbc.com" in home.text
