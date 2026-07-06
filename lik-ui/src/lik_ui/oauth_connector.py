@@ -12,7 +12,11 @@ callback handling, token exchange, and vault deposit live alongside it (U5).
 Nothing here logs client secrets, authorization codes, or tokens.
 """
 
+import base64
+import hashlib
 import re
+import secrets
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from pydantic import BaseModel
@@ -26,6 +30,64 @@ _RESOURCE_METADATA_RE = re.compile(r'resource_metadata="([^"]+)"')
 class ConnectorError(Exception):
     """A connection could not be established (discovery failed, or no client could be
     obtained). Surfaced to the user as a failed connect; nothing is persisted."""
+
+
+def register_connection_routes(app) -> None:
+    """Mount the per-source connect + OAuth callback routes."""
+    from fastapi import Request
+    from fastapi.responses import HTMLResponse, RedirectResponse
+
+    from .app_auth import require_user
+    from .vault import ensure_user_vault
+
+    @app.get("/connections/connect")
+    async def connect(request: Request, mcp_url: str, label: str = ""):
+        require_user(request)
+        connector: OAuthConnector = request.app.state.connector
+        try:
+            discovery = await connector.discover(mcp_url)
+            creds = await connector.acquire_client(mcp_url, discovery)
+        except ConnectorError as exc:
+            return HTMLResponse(f"Could not start connection: {exc}", status_code=502)
+
+        state = secrets.token_urlsafe(32)
+        verifier, challenge = connector.make_pkce()
+        request.session["oauth_connect"] = {
+            "state": state,
+            "verifier": verifier,
+            "mcp_url": mcp_url,
+            "issuer": discovery.issuer,
+            "label": label or mcp_url,
+        }
+        return RedirectResponse(
+            connector.authorization_url(discovery, creds, state, challenge, mcp_url), status_code=303
+        )
+
+    @app.get("/connections/callback")
+    async def connect_callback(request: Request, code: str = "", state: str = "", iss: str = ""):
+        user = require_user(request)
+        pending = request.session.get("oauth_connect") or {}
+        if not state or state != pending.get("state"):
+            return HTMLResponse("Connection state mismatch. Please try again.", status_code=400)
+        # RFC 9207: if the AS returned an issuer, it must match the one we discovered.
+        if iss and iss != pending.get("issuer"):
+            return HTMLResponse("Authorization issuer mismatch.", status_code=400)
+
+        mcp_url = pending["mcp_url"]
+        connector: OAuthConnector = request.app.state.connector
+        try:
+            discovery = await connector.discover(mcp_url)
+            creds = await connector.acquire_client(mcp_url, discovery)
+            tokens = await connector.exchange_code(discovery, creds, code, pending["verifier"], mcp_url)
+        except ConnectorError as exc:
+            return HTMLResponse(f"Connection failed: {exc}", status_code=502)
+
+        vault_id = ensure_user_vault(request.app.state.store, request.app.state.vault_client, user)
+        connector.deposit(
+            request.app.state.vault_client, vault_id, mcp_url, discovery, creds, tokens, pending["label"]
+        )
+        request.session.pop("oauth_connect", None)
+        return RedirectResponse("/connections", status_code=303)
 
 
 class Discovery(BaseModel):
@@ -171,4 +233,107 @@ class OAuthConnector:
             client_secret=config.client_secret,
             scopes=config.scopes,
             offline=config.offline,
+        )
+
+    # --- PKCE authorization-code flow ------------------------------------------
+    @staticmethod
+    def make_pkce() -> tuple[str, str]:
+        """Return (code_verifier, code_challenge) for the S256 PKCE method."""
+        verifier = secrets.token_urlsafe(64)
+        digest = hashlib.sha256(verifier.encode()).digest()
+        challenge = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+        return verifier, challenge
+
+    def _scope_string(self, creds: ClientCredentials) -> str:
+        scopes = list(creds.scopes)
+        if creds.offline and "offline_access" not in scopes:
+            scopes.append("offline_access")
+        return " ".join(scopes)
+
+    def authorization_url(
+        self, discovery: Discovery, creds: ClientCredentials, state: str, code_challenge: str, mcp_url: str
+    ) -> str:
+        params = {
+            "response_type": "code",
+            "client_id": creds.client_id,
+            "redirect_uri": self.redirect_uri,
+            "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            "scope": self._scope_string(creds),
+            # RFC 8707: bind the token to this specific MCP server.
+            "resource": mcp_url,
+        }
+        if creds.offline:
+            # Google needs these to return a refresh token; providers that use the
+            # offline_access scope instead ignore them. Per-provider offline handling is
+            # a live-integration detail flagged in the plan's deferred questions.
+            params["access_type"] = "offline"
+            params["prompt"] = "consent"
+        return str(httpx.URL(discovery.authorization_endpoint, params=params))
+
+    async def exchange_code(
+        self, discovery: Discovery, creds: ClientCredentials, code: str, code_verifier: str, mcp_url: str
+    ) -> dict:
+        data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": self.redirect_uri,
+            "code_verifier": code_verifier,
+            "client_id": creds.client_id,
+            "resource": mcp_url,
+        }
+        if creds.client_secret:  # client_secret_post
+            data["client_secret"] = creds.client_secret
+        async with self._client_factory() as client:
+            resp = await client.post(discovery.token_endpoint, data=data)
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise ConnectorError(f"Token exchange failed: {exc}") from exc
+            return resp.json()
+
+    def _refresh_block(self, discovery: Discovery, creds: ClientCredentials, token_response: dict) -> dict | None:
+        refresh_token = token_response.get("refresh_token")
+        if not refresh_token:
+            return None  # platform can't refresh; user must reconnect when the token expires
+        auth = (
+            {"type": "client_secret_post", "client_secret": creds.client_secret}
+            if creds.client_secret
+            else {"type": "none"}
+        )
+        return {
+            "token_endpoint": discovery.token_endpoint,
+            "client_id": creds.client_id,
+            "scope": token_response.get("scope", self._scope_string(creds)),
+            "refresh_token": refresh_token,
+            "token_endpoint_auth": auth,
+        }
+
+    @staticmethod
+    def _expires_at(token_response: dict) -> str:
+        expires_in = int(token_response.get("expires_in", 3600))
+        return (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
+
+    def deposit(
+        self,
+        vault_client,
+        vault_id: str,
+        mcp_url: str,
+        discovery: Discovery,
+        creds: ClientCredentials,
+        token_response: dict,
+        display_name: str,
+    ) -> str:
+        """Store the obtained tokens as an mcp_oauth credential keyed by the exact MCP URL,
+        including a refresh block so the platform can refresh. Returns the credential id."""
+        # Key by the exact URL the agent declares — the platform matches credentials to
+        # servers by exact URL, so normalizing here would break injection (R8).
+        return vault_client.put_mcp_oauth_credential(
+            vault_id,
+            mcp_server_url=mcp_url,
+            access_token=token_response["access_token"],
+            expires_at=self._expires_at(token_response),
+            refresh=self._refresh_block(discovery, creds, token_response),
+            display_name=display_name,
         )

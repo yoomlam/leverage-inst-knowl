@@ -46,6 +46,11 @@ def build_handler(*, www_auth_hint=True, registration=True, mcp_status=401, call
             return httpx.Response(200, json=_as_meta(registration=registration))
         if url == REG_ENDPOINT and method == "POST":
             return httpx.Response(200, json={"client_id": "dyn_client", "client_secret": "dyn_secret"})
+        if url == f"{ISSUER}/token" and method == "POST":
+            return httpx.Response(
+                200,
+                json={"access_token": "at-xyz", "refresh_token": "rt-xyz", "expires_in": 3600, "scope": "openid email"},
+            )
         return httpx.Response(404)
 
     return handler, calls
@@ -122,3 +127,86 @@ async def test_acquire_raises_when_no_dcr_and_no_config(store):
     d = await conn.discover(MCP_URL)
     with pytest.raises(ConnectorError):
         await conn.acquire_client(MCP_URL, d)
+
+
+# --- U5: PKCE flow, token exchange, deposit --------------------------------------
+
+from lik_ui.oauth_connector import ClientCredentials, Discovery  # noqa: E402
+
+_DISCOVERY = Discovery(
+    issuer=ISSUER,
+    authorization_endpoint=f"{ISSUER}/authorize",
+    token_endpoint=f"{ISSUER}/token",
+    scopes_supported=["openid", "email", "offline_access"],
+)
+_CREDS = ClientCredentials(client_id="cid", client_secret="csecret", scopes=["openid", "email"], offline=True)
+
+
+def test_make_pkce_challenge_is_s256_of_verifier():
+    import base64
+    import hashlib
+
+    conn = OAuthConnector(None, {}, REDIRECT)
+    verifier, challenge = conn.make_pkce()
+    expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    assert challenge == expected
+
+
+def test_authorization_url_carries_pkce_resource_and_offline():
+    from urllib.parse import parse_qs, urlsplit
+
+    conn = OAuthConnector(None, {}, REDIRECT)
+    url = conn.authorization_url(_DISCOVERY, _CREDS, state="st", code_challenge="ch", mcp_url=MCP_URL)
+    q = parse_qs(urlsplit(url).query)
+    assert q["code_challenge"] == ["ch"]
+    assert q["code_challenge_method"] == ["S256"]
+    assert q["resource"] == [MCP_URL]
+    assert q["state"] == ["st"]
+    assert "offline_access" in q["scope"][0]
+    assert q["access_type"] == ["offline"]  # Google path for a refresh token
+
+
+async def test_exchange_code_posts_and_returns_tokens(store):
+    handler, calls = build_handler()
+    conn = _connector(store, handler)
+    tokens = await conn.exchange_code(_DISCOVERY, _CREDS, "the-code", "the-verifier", MCP_URL)
+    assert tokens["access_token"] == "at-xyz"
+    assert calls[("POST", f"{ISSUER}/token")] == 1
+
+
+def test_refresh_block_omitted_without_refresh_token():
+    conn = OAuthConnector(None, {}, REDIRECT)
+    assert conn._refresh_block(_DISCOVERY, _CREDS, {"access_token": "at"}) is None
+    block = conn._refresh_block(_DISCOVERY, _CREDS, {"access_token": "at", "refresh_token": "rt"})
+    assert block["refresh_token"] == "rt"
+    assert block["token_endpoint"] == f"{ISSUER}/token"
+    assert block["token_endpoint_auth"]["client_secret"] == "csecret"
+
+
+class RecordingVaultClient:
+    def __init__(self):
+        self.vault_calls = 0
+        self.credentials = []
+
+    def create_vault(self, display_name, metadata):
+        self.vault_calls += 1
+        return "vlt_1"
+
+    def put_mcp_oauth_credential(self, vault_id, *, mcp_server_url, access_token, expires_at, refresh, display_name):
+        self.credentials.append(
+            {"vault_id": vault_id, "mcp_server_url": mcp_server_url, "access_token": access_token, "refresh": refresh}
+        )
+        return "vcrd_1"
+
+
+def test_deposit_keys_credential_by_exact_url_with_refresh_block(store):
+    conn = OAuthConnector(store, {}, REDIRECT)
+    vc = RecordingVaultClient()
+    conn.deposit(
+        vc, "vlt_9", MCP_URL, _DISCOVERY, _CREDS,
+        {"access_token": "at", "refresh_token": "rt", "expires_in": 3600}, "lik-mcp",
+    )
+    assert len(vc.credentials) == 1
+    cred = vc.credentials[0]
+    assert cred["mcp_server_url"] == MCP_URL  # exact, not normalized
+    assert cred["refresh"]["refresh_token"] == "rt"

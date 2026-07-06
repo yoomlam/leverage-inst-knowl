@@ -17,6 +17,20 @@ class VaultClient(Protocol):
         """Create a vault and return its id (e.g. ``vlt_01ABC...``)."""
         ...
 
+    def put_mcp_oauth_credential(
+        self,
+        vault_id: str,
+        *,
+        mcp_server_url: str,
+        access_token: str,
+        expires_at: str,
+        refresh: dict | None,
+        display_name: str,
+    ) -> str:
+        """Create/replace an mcp_oauth credential in the vault, keyed by mcp_server_url.
+        Returns the credential id."""
+        ...
+
 
 class AnthropicVaultClient:
     """Real ``VaultClient`` backed by the Anthropic SDK's Managed Agents vault API."""
@@ -29,6 +43,29 @@ class AnthropicVaultClient:
     def create_vault(self, display_name: str, metadata: dict) -> str:
         vault = self._client.beta.vaults.create(display_name=display_name, metadata=metadata)
         return vault.id
+
+    def put_mcp_oauth_credential(
+        self,
+        vault_id: str,
+        *,
+        mcp_server_url: str,
+        access_token: str,
+        expires_at: str,
+        refresh: dict | None,
+        display_name: str,
+    ) -> str:
+        auth: dict = {
+            "type": "mcp_oauth",
+            "mcp_server_url": mcp_server_url,
+            "access_token": access_token,
+            "expires_at": expires_at,
+        }
+        if refresh:
+            auth["refresh"] = refresh
+        credential = self._client.beta.vaults.credentials.create(
+            vault_id=vault_id, display_name=display_name, auth=auth
+        )
+        return credential.id
 
 
 def build_vault_client(settings: Settings) -> VaultClient | None:

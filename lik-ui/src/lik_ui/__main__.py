@@ -9,7 +9,9 @@ import uvicorn
 from .app import build_app
 from .app_auth import GoogleOidcClient
 from .db import Database, Store
+from .oauth_connector import OAuthConnector
 from .settings import Settings
+from .sources import build_source_registry
 from .vault import build_vault_client
 
 
@@ -23,7 +25,14 @@ def build_production_app(settings: Settings):
         redirect_uri=f"{settings.app_base_url}/auth/callback",
     )
     vault_client = build_vault_client(settings)
-    return build_app(settings, store=store, app_oidc=app_oidc, vault_client=vault_client)
+    connector = OAuthConnector(
+        store,
+        build_source_registry(settings),
+        redirect_uri=f"{settings.app_base_url}/connections/callback",
+    )
+    return build_app(
+        settings, store=store, app_oidc=app_oidc, vault_client=vault_client, connector=connector
+    )
 
 
 def main() -> None:

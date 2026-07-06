@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Connections · lik-ui{% endblock %}
+{% block content %}
+  <h1>Connections</h1>
+  <p>Agent: <strong>{{ agent.label }}</strong> · <a href="/agents">change</a></p>
+  <p>Connect the sources this agent needs. Connected sources are used on your behalf.</p>
+
+  {% for c in connections %}
+    <div class="card">
+      <strong>{{ c.name }}</strong>
+      <div>{{ c.url }}</div>
+      {% if c.connected %}
+        <span class="status-connected">✓ Connected</span>
+        <a class="btn secondary" href="/connections/connect?mcp_url={{ c.url | urlencode }}&label={{ c.name | urlencode }}">Reconnect</a>
+      {% else %}
+        <span class="status-missing">Not connected</span>
+        <a class="btn" href="/connections/connect?mcp_url={{ c.url | urlencode }}&label={{ c.name | urlencode }}">Connect</a>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <p><a class="btn" href="/chat?agent_id={{ agent.agent_id | urlencode }}">Start chatting</a></p>
+{% endblock %}
