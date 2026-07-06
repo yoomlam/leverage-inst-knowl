@@ -27,6 +27,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Ship the server-rendered templates and static assets inside the installed package —
+# a non-editable `pip install .` (the container) omits non-Python files otherwise.
+[tool.setuptools.package-data]
+lik_ui = ["templates/*.html", "static/*"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"

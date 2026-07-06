@@ -75,6 +75,13 @@ def test_callback_rejects_unverified_email(db):
     assert Store(db).get_user_by_email("x@navapbc.com") is None  # no user created
 
 
+def test_login_page_renders(db):
+    client, _, _ = _client(db, {"email": "x@navapbc.com", "email_verified": True})
+    r = client.get("/login")
+    assert r.status_code == 200
+    assert "Sign in with Google" in r.text
+
+
 def test_callback_handles_denied_consent(db):
     # Google redirects with ?error=access_denied (no code) when the user declines.
     client, oidc, _ = _client(db, {"email": "x@navapbc.com", "email_verified": True})
