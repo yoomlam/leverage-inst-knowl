@@ -46,7 +46,9 @@ The consent flows need a browser and can't be scripted:
 
 ```
 docker compose up -d db
-uv run python -m lik_ui        # or `docker compose up`
+LIK_UI_DB_PORT=5433 uv run python -m lik_ui   # compose publishes Postgres on 5433
+# or run the whole stack in containers (uses the compose network, no port override):
+#   docker compose up
 ```
 
 Then in a browser at `<APP_BASE_URL>`:
