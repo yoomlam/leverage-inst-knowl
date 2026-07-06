@@ -332,13 +332,18 @@ class OAuthConnector:
             if creds.client_secret
             else {"type": "none"}
         )
-        return {
+        block = {
             "token_endpoint": discovery.token_endpoint,
             "client_id": creds.client_id,
-            "scope": token_response.get("scope", self._scope_string(creds, discovery)),
             "refresh_token": refresh_token,
             "token_endpoint_auth": auth,
         }
+        # scope is optional on refresh; include it only when non-empty (the platform
+        # rejects an empty string). Prefer the granted scope from the token response.
+        scope = (token_response.get("scope") or "").strip() or self._scope_string(creds, discovery)
+        if scope:
+            block["scope"] = scope
+        return block
 
     @staticmethod
     def _expires_at(token_response: dict) -> str:

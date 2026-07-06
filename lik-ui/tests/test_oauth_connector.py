@@ -226,6 +226,20 @@ def test_refresh_block_omitted_without_refresh_token():
     assert block["token_endpoint_auth"]["client_secret"] == "csecret"
 
 
+def test_refresh_block_omits_scope_when_empty():
+    # Atlassian-style: no granted scope in the token response and none requested -> omit
+    # the scope field entirely (the platform rejects an empty string).
+    conn = OAuthConnector(None, {}, REDIRECT)
+    creds = ClientCredentials(client_id="c", client_secret=None, scopes=[], offline=True)
+    disc = Discovery(
+        issuer=ISSUER, authorization_endpoint=f"{ISSUER}/authorize",
+        token_endpoint=f"{ISSUER}/token", scopes_supported=[],
+    )
+    block = conn._refresh_block(disc, creds, {"access_token": "at", "refresh_token": "rt"})
+    assert "scope" not in block
+    assert block["token_endpoint_auth"] == {"type": "none"}
+
+
 class RecordingVaultClient:
     def __init__(self):
         self.vault_calls = 0
