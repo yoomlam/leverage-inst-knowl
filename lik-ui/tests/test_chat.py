@@ -74,6 +74,11 @@ def test_normalize_mcp_tool_result_flattens_content_and_pairs_id():
     }
 
 
+def test_normalize_status_running():
+    ev = SimpleNamespace(type="session.status_running", id="s_1")
+    assert AnthropicSessionsClient._normalize(ev) == {"type": "status", "state": "running"}
+
+
 def test_normalize_context_compacted():
     ev = SimpleNamespace(type="agent.thread_context_compacted", id="c_1")
     assert AnthropicSessionsClient._normalize(ev) == {"type": "compacted"}
@@ -148,6 +153,30 @@ def test_stream_renders_text_then_done(db):
     assert '"type": "text"' in r.text
     assert "Hi there" in r.text
     assert '"type": "done"' in r.text
+
+
+def test_stream_surfaces_running_status(db):
+    sc = FakeSessionsClient(events=[{"type": "status", "state": "running"},
+                                    {"type": "text", "text": "Hi"}, {"type": "done"}])
+    client = TestClient(_app(db, sc), follow_redirects=False)
+    _login(client)
+    session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
+
+    r = client.get(f"/chat/{session_id}/stream?message=hello")
+    assert '"type": "status"' in r.text
+    assert '"state": "running"' in r.text
+
+
+def test_history_drops_transient_status_events():
+    # A past turn's "running" is meaningless on replay, so list_events filters it out.
+    raw = [SimpleNamespace(type="session.status_running", id="s_1"),
+           SimpleNamespace(type="agent.message", content=[SimpleNamespace(text="Hi there")])]
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+    client._client = SimpleNamespace(
+        beta=SimpleNamespace(sessions=SimpleNamespace(events=SimpleNamespace(
+            list=lambda session_id, order: iter(raw))))
+    )
+    assert [e["type"] for e in client.list_events("sess_1")] == ["text"]
 
 
 def test_stream_surfaces_mcp_auth_error(db):

@@ -142,12 +142,26 @@
     bubble("user", "You: " + message);
     input.value = "";
 
+    // Every submitted turn starts queued in the agent's work queue. Show that immediately,
+    // move it to "running" when the agent picks the turn up (a `status` event), and clear it
+    // once the agent's first real output arrives (or the turn ends/errors).
+    let pending = bubble("pending", "⏳ Queued — waiting for the agent…");
+    function clearPending() {
+      if (pending) { pending.remove(); pending = null; }
+    }
+
     let assistant = null;
     const url = "/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message);
     const source = new EventSource(url);
 
     source.onmessage = function (ev) {
       const event = JSON.parse(ev.data);
+      if (event.type === "status") {
+        // Keep the indicator, just advance it queued -> running. Real output clears it below.
+        if (pending && event.state === "running") pending.textContent = "⚙ Running — the agent is working…";
+        return;
+      }
+      clearPending();
       if (event.type === "text") {
         if (!assistant) { assistant = bubble("assistant", ""); assistant._raw = ""; }
         assistant._raw += event.text;
@@ -168,6 +182,7 @@
     };
 
     source.onerror = function () {
+      clearPending();
       source.close();
     };
   });

@@ -41,7 +41,8 @@ class SessionsClient(Protocol):
 
     def send_and_stream(self, session_id: str, message: str) -> Iterator[dict]:
         """Send a user message and yield normalized event dicts, e.g.
-        {"type": "text", "text": ...}, {"type": "tool_use", "name": ..., "server": ...},
+        {"type": "status", "state": "running"}, {"type": "text", "text": ...},
+        {"type": "tool_use", "name": ..., "server": ...},
         {"type": "error", "error_type": ..., "mcp_server_name": ...}, {"type": "done"}."""
         ...
 
@@ -118,6 +119,11 @@ class AnthropicSessionsClient:
                 "error_type": getattr(err, "type", "session.error"),
                 "mcp_server_name": getattr(err, "mcp_server_name", None),
             }
+        if etype == "session.status_running":
+            # The turn left the work queue and the agent is now working. Lets the UI move a
+            # submitted message from "queued" to "running" before any output arrives. Transient
+            # by nature, so it's dropped from history replay (see ``list_events``).
+            return {"type": "status", "state": "running"}
         if etype == "agent.thread_context_compacted":
             return {"type": "compacted"}
         if etype == "span.model_request_end":
@@ -150,6 +156,8 @@ class AnthropicSessionsClient:
     def list_events(self, session_id: str) -> Iterator[dict]:
         for event in self._client.beta.sessions.events.list(session_id, order="asc"):
             if normalized := self._normalize(event, include_user=True):
+                if normalized["type"] == "status":
+                    continue  # live-only; a past turn's "running" means nothing on replay
                 yield normalized
 
 

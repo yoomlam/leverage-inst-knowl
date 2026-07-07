@@ -61,6 +61,10 @@ details.system-prompt pre { margin: .5rem 0 0; padding: .6rem .8rem; background:
   border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem;
   max-height: 24rem; overflow-y: auto; }
 
+/* Queued/waiting indicator shown between submit and the turn's first event. */
+.card.pending { background: none; border: none; color: var(--muted); font-size: .9rem;
+  padding: .25rem; font-style: italic; }
+
 /* Context-compaction divider: a quiet centered marker, not a card. */
 .card.compacted { border: none; background: none; text-align: center; color: var(--muted);
   font-size: .85rem; padding: .25rem; margin: .5rem 0; }
