@@ -1,3 +1,5 @@
+import logging
+
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from pydantic import AnyHttpUrl
@@ -8,9 +10,12 @@ from .db import Database
 from .server import build_server
 from .settings import Settings
 
+logger = logging.getLogger("lik_mcp")
+
 
 def make_server(settings: Settings | None = None) -> FastMCP:
     settings = settings or Settings()
+    logger.info("starting lik-mcp with LIK_ENV=%r", settings.env)
     db = Database(settings.conninfo)
 
     authenticator: Authenticator
@@ -53,6 +58,9 @@ def make_server(settings: Settings | None = None) -> FastMCP:
 
 
 if __name__ == "__main__":
+    # Configure logging before make_server so the startup line (and other module logs
+    # emitted during setup) are visible — FastMCP only configures logging inside run().
+    logging.basicConfig(level=logging.INFO)
     # Read settings once so the transport selection and the server share one config.
     settings = Settings()
     make_server(settings).run(settings.transport)
