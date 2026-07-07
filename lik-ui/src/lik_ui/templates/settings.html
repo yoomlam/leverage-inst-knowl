@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Settings · lik-ui{% endblock %}
+{% block content %}
+  <h1>Settings</h1>
+
+  {% if deleted %}
+    <p class="status-connected">✓ Your vault was deleted.</p>
+  {% endif %}
+
+  <div class="card">
+    <h2>Credential vault</h2>
+    <p>Your vault holds the credentials for every source you've connected.</p>
+    {% if vault_id %}
+      <p>Deleting it disconnects all sources and removes those credentials. A new, empty
+         vault is created automatically the next time an agent needs one.</p>
+      <form method="post" action="/settings/vault/delete"
+            onsubmit="return confirm('Delete your vault and all connected credentials? This cannot be undone.');">
+        <button class="btn danger" type="submit">Delete my vault</button>
+      </form>
+    {% else %}
+      <p>You don't have a vault yet. One is created the first time an agent needs it.</p>
+    {% endif %}
+  </div>
+{% endblock %}

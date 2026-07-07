@@ -35,6 +35,10 @@ class VaultClient(Protocol):
         """Return the set of mcp_server_urls the vault currently holds credentials for."""
         ...
 
+    def delete_vault(self, vault_id: str) -> None:
+        """Delete the vault and all credentials it holds."""
+        ...
+
 
 class AnthropicVaultClient:
     """Real ``VaultClient`` backed by the Anthropic SDK's Managed Agents vault API."""
@@ -79,6 +83,9 @@ class AnthropicVaultClient:
                 urls.add(url)
         return urls
 
+    def delete_vault(self, vault_id: str) -> None:
+        self._client.beta.vaults.delete(vault_id)
+
 
 def build_vault_client(settings: Settings) -> VaultClient | None:
     """Real client outside local/test; ``None`` in stub mode (no vault calls made)."""
@@ -97,8 +104,24 @@ def ensure_user_vault(store: Store, vault_client: VaultClient, user: dict) -> st
     if existing:
         return existing
     vault_id = vault_client.create_vault(
-        display_name=user["email"],
+        display_name=f"lik-{user['email']}",
         metadata={"external_user_id": str(user["id"])},
     )
     store.set_user_vault(user["id"], vault_id)
     return vault_id
+
+
+def delete_user_vault(store: Store, vault_client: VaultClient | None, user: dict) -> bool:
+    """Delete the user's vault (and every credential in it) and forget the mapping, so a
+    fresh vault is provisioned on next use. Returns False if the user had no vault.
+
+    Idempotent: safe to call when no vault exists. The mapping is cleared only after the
+    vault is deleted, so a failed delete leaves the mapping intact to retry.
+    """
+    vault_id = store.get_user_vault(user["id"])
+    if not vault_id:
+        return False
+    if vault_client is not None:
+        vault_client.delete_vault(vault_id)
+    store.delete_user_vault(user["id"])
+    return True

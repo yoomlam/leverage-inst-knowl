@@ -34,6 +34,6 @@ where = ["src"]
 lik_ui = ["templates/*.html", "static/*"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]  # "." so tests can import sibling test modules (from tests.X import ...)
 asyncio_mode = "auto"
 testpaths = ["tests"]

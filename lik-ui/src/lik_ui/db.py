@@ -76,6 +76,12 @@ class Store:
             ).fetchone()
             return row["vault_id"] if row else None
 
+    def delete_user_vault(self, user_id: int) -> None:
+        """Forget the user->vault mapping. A new vault is provisioned on next use."""
+        with self.db.connection() as conn:
+            conn.execute("DELETE FROM user_vaults WHERE user_id = %s", (user_id,))
+            conn.commit()
+
     # --- sessions --------------------------------------------------------------
     def create_session(self, user_id: int, agent_id: str, session_id: str, title: str | None = None) -> dict:
         """Persist a session record keyed by the Managed Agents ``session_id``."""

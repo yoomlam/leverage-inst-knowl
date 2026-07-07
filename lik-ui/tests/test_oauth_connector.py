@@ -244,10 +244,15 @@ class RecordingVaultClient:
     def __init__(self):
         self.vault_calls = 0
         self.credentials = []
+        self.deleted = []
 
     def create_vault(self, display_name, metadata):
         self.vault_calls += 1
         return "vlt_1"
+
+    def delete_vault(self, vault_id) -> None:
+        self.deleted.append(vault_id)
+        self.credentials = [c for c in self.credentials if c["vault_id"] != vault_id]
 
     def put_mcp_oauth_credential(self, vault_id, *, mcp_server_url, access_token, expires_at, refresh, display_name):
         self.credentials.append(

@@ -66,6 +66,7 @@ def build_app(
 
     # Register feature routers. Imported here (not at module top) to keep the import graph
     # acyclic — these modules import `templates` from this module.
+    from .account import register_account_routes
     from .agents import register_agent_routes
     from .app_auth import register_auth_routes
     from .chat import register_chat_routes
@@ -75,5 +76,6 @@ def build_app(
     register_connection_routes(app)
     register_agent_routes(app)
     register_chat_routes(app)
+    register_account_routes(app)
 
     return app

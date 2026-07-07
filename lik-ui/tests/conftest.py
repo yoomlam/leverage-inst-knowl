@@ -17,6 +17,11 @@ _TABLES = "users, user_vaults, sessions, dcr_registrations"
 
 
 def pytest_configure(config):
+    # Tests must not read the developer's .env — otherwise real agent/source/production
+    # config leaks into Settings(env="test") and breaks the "unconfigured" assertions. Test
+    # config comes from explicit LIK_UI_* env vars (see README) or the field defaults.
+    Settings.model_config["env_file"] = None
+
     if not Settings().db_name.endswith("_test"):
         raise pytest.UsageError(
             f"LIK_UI_DB_NAME={Settings().db_name!r} must end in '_test'. The suite truncates "
