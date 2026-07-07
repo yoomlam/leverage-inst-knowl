@@ -4,15 +4,19 @@ Routers for the individual concerns (app login, connections, agents, chat) are a
 their own modules in later units; this factory is the single place they are mounted.
 """
 
+import logging
+import traceback as traceback_mod
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from .settings import Settings
+
+logger = logging.getLogger(__name__)
 
 _PKG_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = _PKG_DIR / "templates"
@@ -63,6 +67,27 @@ def build_app(
     @app.get("/healthz")
     def healthz() -> JSONResponse:
         return JSONResponse({"status": "ok"})
+
+    @app.exception_handler(Exception)
+    async def _internal_error(request: Request, exc: Exception):
+        """Replace Starlette's opaque "Internal Server Error" with a descriptive page.
+
+        The full traceback is always logged server-side; it is shown in the browser only in
+        local/test, where there are no real secrets to leak, so a developer sees the cause
+        without reading the server logs."""
+        logger.exception("Unhandled error serving %s %s", request.method, request.url.path)
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {
+                "error_type": type(exc).__name__,
+                "error_message": str(exc) or "(no message)",
+                "traceback": (
+                    "".join(traceback_mod.format_exception(exc)) if settings.is_stub else None
+                ),
+            },
+            status_code=500,
+        )
 
     # Register feature routers. Imported here (not at module top) to keep the import graph
     # acyclic — these modules import `templates` from this module.

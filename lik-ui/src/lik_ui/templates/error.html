@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong — lik-ui{% endblock %}
+{% block content %}
+<section class="error-page">
+  <h1>Something went wrong</h1>
+  <p class="error-summary">{{ error_type }}: {{ error_message }}</p>
+  {% if traceback %}
+  <p class="error-hint">Full traceback (shown because this is a local/test environment):</p>
+  <pre class="error-traceback">{{ traceback }}</pre>
+  {% else %}
+  <p class="error-hint">The details have been logged on the server.</p>
+  {% endif %}
+</section>
+{% endblock %}
