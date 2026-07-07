@@ -49,16 +49,27 @@
     if (event.id) toolCalls[event.id] = b;
   }
 
+  // Pretty-print as JSON when the content parses as such (MCP results are usually a JSON
+  // string on one line); otherwise show the raw text unchanged.
+  function prettyJson(text) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch (e) {
+      return text;
+    }
+  }
+
   // A tool's returned output. Nest it under the matching call bubble when we have it;
   // otherwise (result seen before its call, or id missing) render it standalone.
   function toolResultBubble(event) {
     const label = (event.is_error ? "error" : "result");
+    const body = event.content ? prettyJson(event.content) : "(empty)";
     const call = event.tool_use_id && toolCalls[event.tool_use_id];
     if (call) {
-      call.appendChild(collapsible(label, event.content || "(empty)"));
+      call.appendChild(collapsible(label, body));
     } else {
       bubble("tool" + (event.is_error ? " error" : ""), "⚙ " + label)
-        .appendChild(collapsible(label, event.content || "(empty)"));
+        .appendChild(collapsible(label, body));
     }
   }
 

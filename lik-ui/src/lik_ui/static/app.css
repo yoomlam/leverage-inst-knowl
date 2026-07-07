@@ -22,7 +22,8 @@ a { color: var(--accent); }
 .card.tool details { margin-top: .4rem; }
 .card.tool summary { cursor: pointer; color: var(--accent); }
 .card.tool pre { margin: .4rem 0 0; padding: .5rem; background: #fff; border: 1px solid var(--line);
-  border-radius: 6px; overflow-x: auto; white-space: pre-wrap; font-size: .82rem; }
+  border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem;
+  max-height: 24rem; overflow-y: auto; }
 
 /* Context-compaction divider: a quiet centered marker, not a card. */
 .card.compacted { border: none; background: none; text-align: center; color: var(--muted);
