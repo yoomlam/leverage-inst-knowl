@@ -14,8 +14,8 @@ from .vault import VaultClient, ensure_user_vault
 
 class AgentsClient(Protocol):
     def describe(self, agent_id: str) -> dict:
-        """Return the agent's details in a single lookup:
-        ``{"servers": [{"name", "url"}, ...], "system": str | None, "model": str | None}``."""
+        """Return the agent's details in a single lookup: ``{"name": str | None,
+        "servers": [{"name", "url"}, ...], "system": str | None, "model": str | None}``."""
         ...
 
 
@@ -30,6 +30,7 @@ class AnthropicAgentsClient:
     def describe(self, agent_id: str) -> dict:
         agent = self._client.beta.agents.retrieve(agent_id)
         return {
+            "name": agent.name,
             "servers": [{"name": s.name, "url": s.url} for s in (agent.mcp_servers or [])],
             "system": agent.system,
             "model": getattr(agent.model, "id", None),
@@ -78,6 +79,7 @@ def register_agent_routes(app) -> None:
             {
                 "user": user,
                 "agent": agent,
+                "agent_label": described["name"] or agent.agent_id,
                 "connections": conns,
                 "all_connected": all(c["connected"] for c in conns),
                 "system_prompt": described["system"],

@@ -23,11 +23,20 @@ def test_agents_empty_without_agent_id():
 
 
 def test_agents_lists_configured_agent():
-    s = Settings(env="test", default_agent_id="agent_x", default_environment_id="env_y")
+    s = Settings(env="test", agents_config="agent_x:env_y")
     agents = s.agents
     assert len(agents) == 1
     assert agents[0].agent_id == "agent_x"
     assert agents[0].environment_id == "env_y"
+
+
+def test_agents_parses_multiple_pairs():
+    s = Settings(env="test", agents_config="agent_x:env_x, agent_y:env_y")
+    agents = s.agents
+    assert [(a.agent_id, a.environment_id) for a in agents] == [
+        ("agent_x", "env_x"),
+        ("agent_y", "env_y"),
+    ]
 
 
 def test_require_production_config_raises_when_unconfigured():

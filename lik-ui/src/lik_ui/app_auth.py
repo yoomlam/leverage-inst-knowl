@@ -180,11 +180,12 @@ def register_auth_routes(app: FastAPI) -> None:
         agents_client = request.app.state.agents_client
         agents = []
         for a in request.app.state.settings.agents:
-            info = {"label": a.label, "agent_id": a.agent_id, "environment_id": a.environment_id,
+            info = {"label": a.agent_id, "agent_id": a.agent_id, "environment_id": a.environment_id,
                     "system": None, "model": None}
             if agents_client is not None:
                 try:
                     described = agents_client.describe(a.agent_id)
+                    info["label"] = described["name"] or a.agent_id
                     info["system"], info["model"] = described["system"], described["model"]
                 except Exception:  # noqa: BLE001 - a details lookup failure shouldn't blank the picker
                     pass

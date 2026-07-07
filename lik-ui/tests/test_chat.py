@@ -33,11 +33,19 @@ class FakeSessionsClient:
         yield from self.history
 
 
+class FakeAgentsClient:
+    """Minimal agents client so the untitled-chat default can read the agent's label."""
+
+    def describe(self, agent_id):
+        return {"name": "Discovery Layer Agent", "servers": [], "system": None, "model": None}
+
+
 def _app(db, sessions_client, vc=None):
     vc = vc or RecordingVaultClient()
     oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
-    settings = Settings(env="test", default_agent_id="agent_1", default_environment_id="env_1")
-    return build_app(settings, store=Store(db), app_oidc=oidc, vault_client=vc, sessions_client=sessions_client)
+    settings = Settings(env="test", agents_config="agent_1:env_1")
+    return build_app(settings, store=Store(db), app_oidc=oidc, vault_client=vc,
+                     agents_client=FakeAgentsClient(), sessions_client=sessions_client)
 
 
 def _login(client):
@@ -192,7 +200,7 @@ def test_history_empty_in_stub_mode(db):
     session_id = client.get("/chat?agent_id=agent_1").headers["location"].rsplit("/", 1)[1]
     # Stub mode: no sessions client -> empty history, transcript just starts blank.
     app = build_app(
-        Settings(env="test", default_agent_id="agent_1", default_environment_id="env_1"),
+        Settings(env="test", agents_config="agent_1:env_1"),
         store=Store(db), app_oidc=FakeOidc({"email": "alice@navapbc.com", "email_verified": True}),
         vault_client=RecordingVaultClient(), sessions_client=None,
     )

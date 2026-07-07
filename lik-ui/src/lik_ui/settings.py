@@ -14,12 +14,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class AgentOption(BaseModel):
     """One selectable agent, pairing an agent id with the environment its sessions run in.
 
-    The user picks one of these; lik-ui then queries the agent via the Claude SDK for the
-    MCP servers it declares (the required connections). Only one option exists today, but
-    the list shape lets more be added without code changes.
+    The human-readable label is not stored here — it is read from the agent's own definition
+    via the Claude SDK. The user picks one of these; lik-ui then queries the agent for the MCP
+    servers it declares (the required connections). The list shape lets more agents be added
+    via configuration without code changes.
     """
 
-    label: str
     agent_id: str
     environment_id: str
 
@@ -67,10 +67,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
 
     # --- Agent registry ------------------------------------------------------------
-    # Single agent for now, configured via env; exposed as a list via ``agents``.
-    default_agent_label: str = "Discovery Layer Agent"
-    default_agent_id: str = ""
-    default_environment_id: str = ""
+    # Agents to offer, as ``agent_id:environment_id`` pairs, comma-separated; exposed as a
+    # list via ``agents``. Each agent's label is read from its own definition via the SDK.
+    agents_config: str = ""
 
     @property
     def allowed_hosts(self) -> list[str]:
@@ -78,15 +77,13 @@ class Settings(BaseSettings):
 
     @property
     def agents(self) -> list[AgentOption]:
-        if not self.default_agent_id:
-            return []
-        return [
-            AgentOption(
-                label=self.default_agent_label,
-                agent_id=self.default_agent_id,
-                environment_id=self.default_environment_id,
-            )
-        ]
+        options = []
+        for item in self.agents_config.split(","):
+            agent_id, _, environment_id = item.partition(":")
+            agent_id, environment_id = agent_id.strip(), environment_id.strip()
+            if agent_id:
+                options.append(AgentOption(agent_id=agent_id, environment_id=environment_id))
+        return options
 
     @property
     def conninfo(self) -> str:
@@ -112,8 +109,7 @@ class Settings(BaseSettings):
                 "LIK_UI_APP_OAUTH_CLIENT_ID": self.app_oauth_client_id,
                 "LIK_UI_APP_OAUTH_CLIENT_SECRET": self.app_oauth_client_secret,
                 "LIK_UI_ANTHROPIC_API_KEY": self.anthropic_api_key,
-                "LIK_UI_DEFAULT_AGENT_ID": self.default_agent_id,
-                "LIK_UI_DEFAULT_ENVIRONMENT_ID": self.default_environment_id,
+                "LIK_UI_AGENTS_CONFIG": self.agents_config,
             }.items()
             if not value
         ]

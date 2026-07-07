@@ -14,16 +14,18 @@ ATL = {"name": "atlassian", "url": "https://mcp.atlassian.com/v1/sse"}
 
 
 class FakeAgentsClient:
-    def __init__(self, servers, *, raises=False, system="You are a helpful agent.", model="claude-opus-4-8"):
+    def __init__(self, servers, *, raises=False, name="Discovery Layer Agent",
+                 system="You are a helpful agent.", model="claude-opus-4-8"):
         self.servers = servers
         self.raises = raises
+        self.name = name
         self.system = system
         self.model = model
 
     def describe(self, agent_id):
         if self.raises:
             raise RuntimeError("agent retrieval failed")
-        return {"servers": self.servers, "system": self.system, "model": self.model}
+        return {"name": self.name, "servers": self.servers, "system": self.system, "model": self.model}
 
 
 def test_resolve_marks_connected_and_missing():
@@ -39,7 +41,7 @@ def test_resolve_zero_declared_returns_empty():
 
 def _app(db, agents_client, vc):
     oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
-    settings = Settings(env="test", default_agent_id="agent_1", default_environment_id="env_1")
+    settings = Settings(env="test", agents_config="agent_1:env_1")
     return build_app(settings, store=Store(db), app_oidc=oidc, vault_client=vc, agents_client=agents_client)
 
 
