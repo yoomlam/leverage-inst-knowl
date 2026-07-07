@@ -47,6 +47,10 @@ class AnthropicAgentsClient:
         }
 
     def describe_skill(self, skill_id: str, version: str) -> dict:
+        # An agent may pin a skill to "latest" rather than a concrete version, but the version
+        # lookup (which carries name/description) requires a numeric timestamp, so resolve it.
+        if not version.isdigit():
+            version = self._client.beta.skills.retrieve(skill_id).latest_version
         v = self._client.beta.skills.versions.retrieve(version, skill_id=skill_id)
         return {"name": v.name, "description": v.description}
 
