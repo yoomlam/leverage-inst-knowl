@@ -25,8 +25,41 @@
     }
   }
 
+  // Maps a tool_use id to its rendered bubble so a later tool_result can nest under its call.
+  const toolCalls = {};
+
+  function collapsible(summaryText, body) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = summaryText;
+    const pre = document.createElement("pre");
+    pre.textContent = body;
+    details.appendChild(summary);
+    details.appendChild(pre);
+    return details;
+  }
+
   function toolBubble(event) {
-    bubble("tool", "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
+    const b = bubble("tool", "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
+    // Show the tool-call arguments in a collapsible block so the transcript stays scannable
+    // but the detail is one click away. Omitted when there are no arguments.
+    if (event.input && Object.keys(event.input).length) {
+      b.appendChild(collapsible("arguments", JSON.stringify(event.input, null, 2)));
+    }
+    if (event.id) toolCalls[event.id] = b;
+  }
+
+  // A tool's returned output. Nest it under the matching call bubble when we have it;
+  // otherwise (result seen before its call, or id missing) render it standalone.
+  function toolResultBubble(event) {
+    const label = (event.is_error ? "error" : "result");
+    const call = event.tool_use_id && toolCalls[event.tool_use_id];
+    if (call) {
+      call.appendChild(collapsible(label, event.content || "(empty)"));
+    } else {
+      bubble("tool" + (event.is_error ? " error" : ""), "⚙ " + label)
+        .appendChild(collapsible(label, event.content || "(empty)"));
+    }
   }
 
   function errorBubble(event) {
@@ -53,6 +86,8 @@
             renderMarkdown(el, event.text);
           } else if (event.type === "tool_use") {
             toolBubble(event);
+          } else if (event.type === "tool_result") {
+            toolResultBubble(event);
           } else if (event.type === "error") {
             errorBubble(event);
           }
@@ -80,6 +115,8 @@
         renderMarkdown(assistant, assistant._raw);
       } else if (event.type === "tool_use") {
         toolBubble(event);
+      } else if (event.type === "tool_result") {
+        toolResultBubble(event);
       } else if (event.type === "error") {
         errorBubble(event);
       } else if (event.type === "done") {

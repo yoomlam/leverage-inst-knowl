@@ -18,6 +18,19 @@ from .settings import Settings
 from .vault import ensure_user_vault
 
 
+def _blocks_to_text(blocks) -> str:
+    """Flatten a tool-result content block list to display text. Text blocks contribute
+    their text; non-text blocks (image/document/search_result) are noted by kind so the
+    reader knows something was returned without the UI having to render binary payloads."""
+    parts = []
+    for b in blocks or []:
+        if text := getattr(b, "text", None):
+            parts.append(text)
+        else:
+            parts.append(f"[{getattr(b, 'type', 'content')}]")
+    return "\n".join(parts)
+
+
 class SessionsClient(Protocol):
     def create_session(self, agent_id: str, environment_id: str, vault_ids: list[str]) -> str:
         """Create a session and return its id."""
@@ -78,7 +91,20 @@ class AnthropicSessionsClient:
                 return {"type": "text", "text": text}
             return None
         if etype == "agent.mcp_tool_use":
-            return {"type": "tool_use", "name": getattr(event, "name", ""), "server": getattr(event, "mcp_server_name", None)}
+            return {
+                "type": "tool_use",
+                "id": getattr(event, "id", None),
+                "name": getattr(event, "name", ""),
+                "server": getattr(event, "mcp_server_name", None),
+                "input": getattr(event, "input", None) or {},
+            }
+        if etype == "agent.mcp_tool_result":
+            return {
+                "type": "tool_result",
+                "tool_use_id": getattr(event, "mcp_tool_use_id", None),
+                "is_error": bool(getattr(event, "is_error", False)),
+                "content": _blocks_to_text(getattr(event, "content", None)),
+            }
         if etype == "session.error":
             err = getattr(event, "error", None)
             return {

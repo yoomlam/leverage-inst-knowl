@@ -1,8 +1,11 @@
 """Chat: session create/resume and SSE streaming. The Managed Agents session is faked."""
 
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 from lik_ui.app import build_app
+from lik_ui.chat import AnthropicSessionsClient
 from lik_ui.db import Store
 from lik_ui.settings import Settings
 from tests.test_app_auth import FakeOidc, _start_login_and_get_state
@@ -40,6 +43,27 @@ def _app(db, sessions_client, vc=None):
 def _login(client):
     state = _start_login_and_get_state(client)
     client.get(f"/auth/callback?code=x&state={state}")
+
+
+def test_normalize_mcp_tool_use_carries_id_and_input():
+    ev = SimpleNamespace(type="agent.mcp_tool_use", id="tu_1", name="search",
+                         mcp_server_name="atlassian", input={"q": "hi"})
+    assert AnthropicSessionsClient._normalize(ev) == {
+        "type": "tool_use", "id": "tu_1", "name": "search",
+        "server": "atlassian", "input": {"q": "hi"},
+    }
+
+
+def test_normalize_mcp_tool_result_flattens_content_and_pairs_id():
+    ev = SimpleNamespace(
+        type="agent.mcp_tool_result", mcp_tool_use_id="tu_1", is_error=False,
+        content=[SimpleNamespace(type="text", text="line one"),
+                 SimpleNamespace(type="image")],
+    )
+    assert AnthropicSessionsClient._normalize(ev) == {
+        "type": "tool_result", "tool_use_id": "tu_1", "is_error": False,
+        "content": "line one\n[image]",
+    }
 
 
 def test_new_chat_creates_session_with_vault_and_redirects(db):
