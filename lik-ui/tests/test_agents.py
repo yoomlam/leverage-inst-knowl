@@ -17,19 +17,20 @@ ATL = {"name": "atlassian", "url": "https://mcp.atlassian.com/v1/sse"}
 
 class FakeAgentsClient:
     def __init__(self, servers, *, raises=False, name="Discovery Layer Agent",
-                 system="You are a helpful agent.", model="claude-opus-4-8", skills=None):
+                 system="You are a helpful agent.", model="claude-opus-4-8", skills=None, version="7"):
         self.servers = servers
         self.raises = raises
         self.name = name
         self.system = system
         self.model = model
         self.skills = skills or []
+        self.version = version
 
     def describe(self, agent_id):
         if self.raises:
             raise RuntimeError("agent retrieval failed")
         return {"name": self.name, "servers": self.servers, "system": self.system,
-                "model": self.model, "skills": self.skills}
+                "model": self.model, "skills": self.skills, "version": self.version}
 
     def describe_skill(self, skill_id, version):
         return {"name": f"Skill {skill_id}", "description": f"Does {skill_id} things (v{version})."}
@@ -96,6 +97,16 @@ def test_connections_page_reflects_vault_state_and_flips_on_connect(db):
     r2 = client.get("/connections?agent_id=agent_1")
     assert "Connected" in r2.text
     assert "disabled" not in r2.text  # all sources connected -> Start chatting enabled
+
+
+def test_home_page_shows_agent_version(db):
+    client = TestClient(_app(db, FakeAgentsClient([LIK], version="7"), RecordingVaultClient()),
+                        follow_redirects=False)
+    _login(client)
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Version" in r.text
+    assert ">7<" in r.text
 
 
 def test_connections_page_lists_agent_skills(db):

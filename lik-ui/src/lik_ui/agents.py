@@ -16,7 +16,7 @@ class AgentsClient(Protocol):
     def describe(self, agent_id: str) -> dict:
         """Return the agent's details in a single lookup: ``{"name": str | None,
         "servers": [{"name", "url"}, ...], "system": str | None, "model": str | None,
-        "skills": [{"id", "type", "version"}, ...]}``."""
+        "skills": [{"id", "type", "version"}, ...], "version": str | None}``."""
         ...
 
     def describe_skill(self, skill_id: str, version: str) -> dict:
@@ -45,6 +45,7 @@ class AnthropicAgentsClient:
             "skills": [
                 {"id": s.skill_id, "type": s.type, "version": s.version} for s in (agent.skills or [])
             ],
+            "version": getattr(agent, "version", None),
         }
 
     def describe_skill(self, skill_id: str, version: str) -> dict:
