@@ -38,6 +38,7 @@ class FakeAgentsClient:
             "name": f"Skill {skill_id}",
             "description": f"Does {skill_id} things (v{version}).",
             "doc": f"# {skill_id}\n\nFull SKILL.md for {skill_id} at v{version}.",
+            "doc_note": "",
         }
 
 
@@ -83,6 +84,34 @@ def test_describe_skill_resolves_latest_and_extracts_skill_md():
     assert out["name"] == "Query Project Index"
     assert out["description"] == "Short blurb."
     assert "Detailed instructions here." in out["doc"]
+    assert out["doc_note"] == ""
+
+
+def test_describe_skill_degrades_when_download_denied():
+    """If the credential can't download skill content, name/description still return and the
+    doc_note explains why the full SKILL.md is missing."""
+    def _denied(version, *, skill_id):
+        raise RuntimeError("Downloading skill content is not supported with this credential type.")
+
+    fake_sdk = SimpleNamespace(
+        beta=SimpleNamespace(
+            skills=SimpleNamespace(
+                versions=SimpleNamespace(
+                    retrieve=lambda version, *, skill_id: SimpleNamespace(
+                        name="Query Project Index", description="Short blurb."
+                    ),
+                    download=_denied,
+                ),
+            )
+        )
+    )
+    client = AnthropicAgentsClient.__new__(AnthropicAgentsClient)
+    client._client = fake_sdk
+
+    out = client.describe_skill("lik-query-project-index", "1759178010641129")
+    assert out["name"] == "Query Project Index"
+    assert out["doc"] == ""
+    assert "unavailable" in out["doc_note"].lower()
 
 
 def _app(db, agents_client, vc):

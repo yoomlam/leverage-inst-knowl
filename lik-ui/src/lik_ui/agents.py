@@ -53,17 +53,23 @@ class AnthropicAgentsClient:
         if not version.isdigit():
             version = self._client.beta.skills.retrieve(skill_id).latest_version
         v = self._client.beta.skills.versions.retrieve(version, skill_id=skill_id)
-        return {"name": v.name, "description": v.description, "doc": self._skill_doc(skill_id, version)}
+        doc, doc_note = self._skill_doc(skill_id, version)
+        return {"name": v.name, "description": v.description, "doc": doc, "doc_note": doc_note}
 
-    def _skill_doc(self, skill_id: str, version: str) -> str:
-        """Download the skill version's content (a zip archive) and return its SKILL.md text."""
+    def _skill_doc(self, skill_id: str, version: str) -> tuple[str, str]:
+        """Download the skill version's content (a zip archive) and return ``(skill_md, note)``.
+        Some credential types cannot download skill content; in that case the SKILL.md is empty
+        and ``note`` explains why, so the rest of the details still render."""
         import io
         import zipfile
 
-        data = self._client.beta.skills.versions.download(version, skill_id=skill_id).read()
+        try:
+            data = self._client.beta.skills.versions.download(version, skill_id=skill_id).read()
+        except Exception as exc:  # noqa: BLE001 - degrade to name/description if download is denied
+            return "", f"Full instructions (SKILL.md) unavailable: {exc}"
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             member = next((n for n in z.namelist() if n.rsplit("/", 1)[-1] == "SKILL.md"), None)
-            return z.read(member).decode("utf-8") if member else ""
+            return (z.read(member).decode("utf-8") if member else ""), ""
 
 
 def build_agents_client(settings: Settings) -> AgentsClient | None:

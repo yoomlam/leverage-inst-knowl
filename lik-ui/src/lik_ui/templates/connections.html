@@ -97,6 +97,11 @@
               doc.className = "skill-doc";
               doc.textContent = res.d.doc;
               box.appendChild(doc);
+            } else if (res.d.doc_note) {
+              var note = document.createElement("p");
+              note.className = "status-missing";
+              note.textContent = res.d.doc_note;
+              box.appendChild(note);
             }
           })
           .catch(function () { box.textContent = "Could not load skill."; })
