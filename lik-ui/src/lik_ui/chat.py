@@ -97,7 +97,8 @@ class AnthropicSessionsClient:
             if text := getattr(block, "text", None):
                 return {"type": "text", "text": text}
             return None
-        if etype == "agent.mcp_tool_use":
+        if etype in ("agent.mcp_tool_use", "agent.tool_use"):
+            # MCP tools carry an mcp_server_name; built-in agent tools don't (server -> None).
             return {
                 "type": "tool_use",
                 "id": getattr(event, "id", None),
@@ -105,10 +106,11 @@ class AnthropicSessionsClient:
                 "server": getattr(event, "mcp_server_name", None),
                 "input": getattr(event, "input", None) or {},
             }
-        if etype == "agent.mcp_tool_result":
+        if etype in ("agent.mcp_tool_result", "agent.tool_result"):
+            # The call id lives on mcp_tool_use_id for MCP results, tool_use_id for built-ins.
             return {
                 "type": "tool_result",
-                "tool_use_id": getattr(event, "mcp_tool_use_id", None),
+                "tool_use_id": getattr(event, "mcp_tool_use_id", None) or getattr(event, "tool_use_id", None),
                 "is_error": bool(getattr(event, "is_error", False)),
                 "content": _blocks_to_text(getattr(event, "content", None)),
             }

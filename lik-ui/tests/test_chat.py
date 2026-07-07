@@ -62,6 +62,24 @@ def test_normalize_mcp_tool_use_carries_id_and_input():
     }
 
 
+def test_normalize_builtin_tool_use_has_no_server():
+    ev = SimpleNamespace(type="agent.tool_use", id="tu_2", name="think", input={"note": "hm"})
+    assert AnthropicSessionsClient._normalize(ev) == {
+        "type": "tool_use", "id": "tu_2", "name": "think",
+        "server": None, "input": {"note": "hm"},
+    }
+
+
+def test_normalize_builtin_tool_result_pairs_tool_use_id():
+    ev = SimpleNamespace(
+        type="agent.tool_result", tool_use_id="tu_2", is_error=False,
+        content=[SimpleNamespace(type="text", text="done")],
+    )
+    assert AnthropicSessionsClient._normalize(ev) == {
+        "type": "tool_result", "tool_use_id": "tu_2", "is_error": False, "content": "done",
+    }
+
+
 def test_normalize_mcp_tool_result_flattens_content_and_pairs_id():
     ev = SimpleNamespace(
         type="agent.mcp_tool_result", mcp_tool_use_id="tu_1", is_error=False,
