@@ -15,17 +15,22 @@ ATL = {"name": "atlassian", "url": "https://mcp.atlassian.com/v1/sse"}
 
 class FakeAgentsClient:
     def __init__(self, servers, *, raises=False, name="Discovery Layer Agent",
-                 system="You are a helpful agent.", model="claude-opus-4-8"):
+                 system="You are a helpful agent.", model="claude-opus-4-8", skills=None):
         self.servers = servers
         self.raises = raises
         self.name = name
         self.system = system
         self.model = model
+        self.skills = skills or []
 
     def describe(self, agent_id):
         if self.raises:
             raise RuntimeError("agent retrieval failed")
-        return {"name": self.name, "servers": self.servers, "system": self.system, "model": self.model}
+        return {"name": self.name, "servers": self.servers, "system": self.system,
+                "model": self.model, "skills": self.skills}
+
+    def describe_skill(self, skill_id, version):
+        return {"name": f"Skill {skill_id}", "description": f"Does {skill_id} things (v{version})."}
 
 
 def test_resolve_marks_connected_and_missing():
@@ -67,6 +72,35 @@ def test_connections_page_reflects_vault_state_and_flips_on_connect(db):
     r2 = client.get("/connections?agent_id=agent_1")
     assert "Connected" in r2.text
     assert "disabled" not in r2.text  # all sources connected -> Start chatting enabled
+
+
+def test_connections_page_lists_agent_skills(db):
+    skills = [{"id": "lik-query-project-index", "type": "custom", "version": "1"}]
+    client = TestClient(_app(db, FakeAgentsClient([LIK], skills=skills), RecordingVaultClient()),
+                        follow_redirects=False)
+    _login(client)
+    r = client.get("/connections?agent_id=agent_1")
+    assert r.status_code == 200
+    assert "Skills (1)" in r.text
+    assert "lik-query-project-index" in r.text
+    assert "skill-details-btn" in r.text  # each skill has a button to fetch its details
+
+
+def test_skill_details_endpoint_returns_name_and_description(db):
+    client = TestClient(_app(db, FakeAgentsClient([LIK]), RecordingVaultClient()), follow_redirects=False)
+    _login(client)
+    r = client.get("/connections/skill?skill_id=lik-query-project-index&version=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "Skill lik-query-project-index"
+    assert "v3" in body["description"]
+
+
+def test_skill_details_requires_login(db):
+    client = TestClient(_app(db, FakeAgentsClient([LIK]), RecordingVaultClient()), follow_redirects=False)
+    r = client.get("/connections/skill?skill_id=x&version=1")
+    assert r.status_code == 303
+    assert r.headers["location"] == "/login"
 
 
 def test_connections_unknown_agent_is_404(db):

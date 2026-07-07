@@ -11,6 +11,22 @@
     </details>
   {% endif %}
 
+  {% if skills %}
+    <details class="skills">
+      <summary>Skills ({{ skills | length }})</summary>
+      <ul>
+        {% for s in skills %}
+          <li>
+            {{ s.id }} <small>({{ s.type }} · v{{ s.version }})</small>
+            <button type="button" class="btn secondary skill-details-btn"
+                    data-skill-id="{{ s.id }}" data-skill-version="{{ s.version }}">Details</button>
+            <div class="skill-details" hidden></div>
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
   <p>Connect the sources this agent needs. Connected sources are used on your behalf.</p>
   {% for c in connections %}
     <div class="card">
@@ -47,5 +63,40 @@
         el.value = {{ agent_label | tojson }} + " · " + new Date().toLocaleString();
       }
     })();
+    {% if skills %}
+
+    // Fetch a skill's name and description on demand when its "Details" button is clicked.
+    // The agent definition only carries each skill's id/version, so the name/description are
+    // looked up from the server and shown inline below the skill.
+    document.querySelectorAll(".skill-details-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var box = btn.parentElement.querySelector(".skill-details");
+        var params = new URLSearchParams({
+          skill_id: btn.dataset.skillId,
+          version: btn.dataset.skillVersion,
+        });
+        btn.disabled = true;
+        box.hidden = false;
+        box.textContent = "Loading…";
+        fetch("/connections/skill?" + params.toString())
+          .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (res) {
+            if (!res.ok) {
+              box.textContent = res.d.detail || "Could not load skill.";
+              return;
+            }
+            box.textContent = "";
+            var name = document.createElement("strong");
+            name.textContent = res.d.name;
+            var desc = document.createElement("p");
+            desc.textContent = res.d.description;
+            box.appendChild(name);
+            box.appendChild(desc);
+          })
+          .catch(function () { box.textContent = "Could not load skill."; })
+          .finally(function () { btn.disabled = false; });
+      });
+    });
+    {% endif %}
   </script>
 {% endblock %}

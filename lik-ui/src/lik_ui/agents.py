@@ -15,7 +15,14 @@ from .vault import VaultClient, ensure_user_vault
 class AgentsClient(Protocol):
     def describe(self, agent_id: str) -> dict:
         """Return the agent's details in a single lookup: ``{"name": str | None,
-        "servers": [{"name", "url"}, ...], "system": str | None, "model": str | None}``."""
+        "servers": [{"name", "url"}, ...], "system": str | None, "model": str | None,
+        "skills": [{"id", "type", "version"}, ...]}``."""
+        ...
+
+    def describe_skill(self, skill_id: str, version: str) -> dict:
+        """Return a skill version's human-readable details: ``{"name": str, "description": str}``.
+        The agent definition only carries a skill's id/version; its name and description live on
+        the skill version and are fetched on demand."""
         ...
 
 
@@ -34,7 +41,14 @@ class AnthropicAgentsClient:
             "servers": [{"name": s.name, "url": s.url} for s in (agent.mcp_servers or [])],
             "system": agent.system,
             "model": getattr(agent.model, "id", None),
+            "skills": [
+                {"id": s.skill_id, "type": s.type, "version": s.version} for s in (agent.skills or [])
+            ],
         }
+
+    def describe_skill(self, skill_id: str, version: str) -> dict:
+        v = self._client.beta.skills.versions.retrieve(version, skill_id=skill_id)
+        return {"name": v.name, "description": v.description}
 
 
 def build_agents_client(settings: Settings) -> AgentsClient | None:
@@ -51,7 +65,7 @@ def resolve_connections(servers: list[dict], connected_urls: set[str]) -> list[d
 
 def register_agent_routes(app) -> None:
     from fastapi import Request
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
 
     from .app import templates
     from .app_auth import require_user
@@ -83,5 +97,15 @@ def register_agent_routes(app) -> None:
                 "connections": conns,
                 "all_connected": all(c["connected"] for c in conns),
                 "system_prompt": described["system"],
+                "skills": described.get("skills", []),
             },
         )
+
+    @app.get("/connections/skill")
+    async def skill_details(request: Request, skill_id: str, version: str):
+        require_user(request)  # gate behind login, same as the connections page
+        try:
+            details = request.app.state.agents_client.describe_skill(skill_id, version)
+        except Exception as exc:  # noqa: BLE001 - surface SDK errors as JSON, not a 500
+            return JSONResponse({"detail": f"Could not load skill: {exc}"}, status_code=502)
+        return JSONResponse(details)
