@@ -23,6 +23,9 @@ a { color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .start-chat { display: flex; gap: .5rem; align-items: center; max-width: 640px; }
 .start-chat input { flex: 1; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 6px; }
+.cred-list { list-style: none; padding: 0; margin: .5rem 0; }
+.cred-list li { padding: .5rem .7rem; border: 1px solid var(--line); border-radius: 6px; margin: .35rem 0; background: var(--bg); }
+.cred-url { color: var(--muted); font-size: .85rem; word-break: break-all; }
 .status-connected { color: #2f855a; }
 .status-missing { color: #c05621; }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin: .75rem 0; background: #fff; }

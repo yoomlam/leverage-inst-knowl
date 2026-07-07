@@ -8,11 +8,15 @@ class FakeVaultClient:
         self.calls = 0
         self.last_metadata = None
         self.deleted = []
+        self.credentials: list[dict] = []
 
     def create_vault(self, display_name: str, metadata: dict) -> str:
         self.calls += 1
         self.last_metadata = metadata
         return f"vlt_{self.calls}"
+
+    def list_credentials(self, vault_id: str) -> list[dict]:
+        return self.credentials
 
     def delete_vault(self, vault_id: str) -> None:
         self.deleted.append(vault_id)

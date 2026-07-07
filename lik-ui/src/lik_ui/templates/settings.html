@@ -11,6 +11,18 @@
     <h2>Credential vault</h2>
     <p>Your vault holds the credentials for every source you've connected.</p>
     {% if vault_id %}
+      {% if credentials %}
+        <ul class="cred-list">
+          {% for c in credentials %}
+            <li>
+              <strong>{{ c.display_name or "Credential" }}</strong>
+              {% if c.url %}<div class="cred-url">{{ c.url }}</div>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>No credentials connected yet.</p>
+      {% endif %}
       <p>Deleting it disconnects all sources and removes those credentials. A new, empty
          vault is created automatically the next time an agent needs one.</p>
       <form method="post" action="/settings/vault/delete"

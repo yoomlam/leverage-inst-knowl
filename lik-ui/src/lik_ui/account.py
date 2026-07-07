@@ -19,10 +19,17 @@ def register_account_routes(app) -> None:
     async def settings_page(request: Request, deleted: str = ""):
         user = require_user(request)
         vault_id = request.app.state.store.get_user_vault(user["id"])
+        vault_client: VaultClient | None = request.app.state.vault_client
+        credentials = []
+        if vault_id and vault_client is not None:
+            try:
+                credentials = vault_client.list_credentials(vault_id)
+            except Exception as exc:  # noqa: BLE001 - a listing failure shouldn't 500 the page
+                return HTMLResponse(f"Could not load your credentials: {exc}", status_code=502)
         return templates.TemplateResponse(
             request,
             "settings.html",
-            {"user": user, "vault_id": vault_id, "deleted": bool(deleted)},
+            {"user": user, "vault_id": vault_id, "credentials": credentials, "deleted": bool(deleted)},
         )
 
     @app.post("/settings/vault/delete")

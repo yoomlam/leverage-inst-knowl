@@ -34,6 +34,15 @@ def test_settings_page_renders(db):
     assert "Delete my vault" in r.text
 
 
+def test_settings_page_lists_credentials(db):
+    client, vc = _client(db)
+    vc.credentials = [{"display_name": "lik-mcp", "url": "https://mcp.example/mcp"}]
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "lik-mcp" in r.text
+    assert "https://mcp.example/mcp" in r.text
+
+
 def test_delete_vault_deletes_and_forgets_mapping(db):
     client, vc = _client(db)
     user = Store(db).get_user_by_email("alice@navapbc.com")

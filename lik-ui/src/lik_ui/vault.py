@@ -35,6 +35,10 @@ class VaultClient(Protocol):
         """Return the set of mcp_server_urls the vault currently holds credentials for."""
         ...
 
+    def list_credentials(self, vault_id: str) -> list[dict]:
+        """Return the vault's credentials as ``{"display_name", "url"}`` dicts (no secrets)."""
+        ...
+
     def delete_vault(self, vault_id: str) -> None:
         """Delete the vault and all credentials it holds."""
         ...
@@ -82,6 +86,13 @@ class AnthropicVaultClient:
             if url:
                 urls.add(url)
         return urls
+
+    def list_credentials(self, vault_id: str) -> list[dict]:
+        creds = []
+        for cred in self._client.beta.vaults.credentials.list(vault_id=vault_id):
+            url = getattr(getattr(cred, "auth", None), "mcp_server_url", None)
+            creds.append({"display_name": getattr(cred, "display_name", None), "url": url})
+        return creds
 
     def delete_vault(self, vault_id: str) -> None:
         self._client.beta.vaults.delete(vault_id)
