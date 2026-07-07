@@ -92,6 +92,12 @@
             desc.textContent = res.d.description;
             box.appendChild(name);
             box.appendChild(desc);
+            if (res.d.doc) {
+              var doc = document.createElement("pre");
+              doc.className = "skill-doc";
+              doc.textContent = res.d.doc;
+              box.appendChild(doc);
+            }
           })
           .catch(function () { box.textContent = "Could not load skill."; })
           .finally(function () { btn.disabled = false; });

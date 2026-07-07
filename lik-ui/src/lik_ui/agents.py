@@ -20,9 +20,10 @@ class AgentsClient(Protocol):
         ...
 
     def describe_skill(self, skill_id: str, version: str) -> dict:
-        """Return a skill version's human-readable details: ``{"name": str, "description": str}``.
-        The agent definition only carries a skill's id/version; its name and description live on
-        the skill version and are fetched on demand."""
+        """Return a skill version's human-readable details: ``{"name": str, "description": str,
+        "doc": str}``. The agent definition only carries a skill's id/version; its name,
+        description, and full instructions (SKILL.md) live on the skill version and are fetched
+        on demand. ``doc`` is the SKILL.md text, or "" if the version has none."""
         ...
 
 
@@ -48,11 +49,21 @@ class AnthropicAgentsClient:
 
     def describe_skill(self, skill_id: str, version: str) -> dict:
         # An agent may pin a skill to "latest" rather than a concrete version, but the version
-        # lookup (which carries name/description) requires a numeric timestamp, so resolve it.
+        # lookups (which carry the details) require a numeric timestamp, so resolve it.
         if not version.isdigit():
             version = self._client.beta.skills.retrieve(skill_id).latest_version
         v = self._client.beta.skills.versions.retrieve(version, skill_id=skill_id)
-        return {"name": v.name, "description": v.description}
+        return {"name": v.name, "description": v.description, "doc": self._skill_doc(skill_id, version)}
+
+    def _skill_doc(self, skill_id: str, version: str) -> str:
+        """Download the skill version's content (a zip archive) and return its SKILL.md text."""
+        import io
+        import zipfile
+
+        data = self._client.beta.skills.versions.download(version, skill_id=skill_id).read()
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            member = next((n for n in z.namelist() if n.rsplit("/", 1)[-1] == "SKILL.md"), None)
+            return z.read(member).decode("utf-8") if member else ""
 
 
 def build_agents_client(settings: Settings) -> AgentsClient | None:
