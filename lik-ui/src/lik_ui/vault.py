@@ -66,30 +66,40 @@ class AnthropicVaultClient:
         refresh: dict | None,
         display_name: str,
     ) -> str:
-        auth: dict = {
-            "type": "mcp_oauth",
-            "mcp_server_url": mcp_server_url,
-            "access_token": access_token,
-            "expires_at": expires_at,
-        }
-        if refresh:
-            auth["refresh"] = refresh
-        # Replace, not just create: the platform allows only one credential per MCP server
-        # URL and rejects a duplicate create with 409. On reconnect the user has just
-        # obtained a fresh token, so drop any existing credential for this exact URL before
-        # depositing the new one.
-        self._delete_existing_credential(vault_id, mcp_server_url)
-        credential = self._client.beta.vaults.credentials.create(
-            vault_id=vault_id, display_name=display_name, auth=auth
-        )
+        # The platform allows only one credential per MCP server URL and rejects a duplicate
+        # create with 409. On reconnect the user has just obtained a fresh token, so update the
+        # existing credential in place (keeping its id, no absence window) rather than replacing
+        # it; only mint a new one when none exists yet for this exact URL.
+        existing_id = self._find_credential_id(vault_id, mcp_server_url)
+        if existing_id:
+            # The URL is the credential's immutable key, so it is omitted from the update auth.
+            auth: dict = {"type": "mcp_oauth", "access_token": access_token, "expires_at": expires_at}
+            if refresh:
+                auth["refresh"] = refresh
+            credential = self._client.beta.vaults.credentials.update(
+                existing_id, vault_id=vault_id, display_name=display_name, auth=auth
+            )
+        else:
+            auth = {
+                "type": "mcp_oauth",
+                "mcp_server_url": mcp_server_url,
+                "access_token": access_token,
+                "expires_at": expires_at,
+            }
+            if refresh:
+                auth["refresh"] = refresh
+            credential = self._client.beta.vaults.credentials.create(
+                vault_id=vault_id, display_name=display_name, auth=auth
+            )
         return credential.id
 
-    def _delete_existing_credential(self, vault_id: str, mcp_server_url: str) -> None:
-        """Delete the credential (if any) already keyed to this exact MCP server URL."""
+    def _find_credential_id(self, vault_id: str, mcp_server_url: str) -> str | None:
+        """Return the id of the credential (if any) already keyed to this exact MCP server URL."""
         for cred in self._client.beta.vaults.credentials.list(vault_id=vault_id):
             url = getattr(getattr(cred, "auth", None), "mcp_server_url", None)
             if url == mcp_server_url:
-                self._client.beta.vaults.credentials.delete(cred.id, vault_id=vault_id)
+                return cred.id
+        return None
 
     def list_credential_urls(self, vault_id: str) -> set[str]:
         urls: set[str] = set()

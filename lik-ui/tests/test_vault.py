@@ -88,6 +88,13 @@ class _FakeCredentialsAPI:
         self.creds.append(cred)
         return cred
 
+    def update(self, credential_id, *, vault_id, display_name, auth):
+        # The update auth carries no mcp_server_url (the URL is the immutable key), so the
+        # existing credential's URL is preserved and its id is unchanged.
+        cred = next(c for c in self.creds if c.id == credential_id)
+        assert "mcp_server_url" not in auth
+        return cred
+
 
 def _vault_client_with_fake_sdk():
     client = AnthropicVaultClient(api_key="test-key")  # no network on construction
@@ -103,15 +110,16 @@ def _put(client, url):
     )
 
 
-def test_reconnect_replaces_existing_credential_for_same_url():
-    """Reconnect (a second deposit for the same URL) must not 409 — it replaces the old one."""
+def test_reconnect_updates_existing_credential_for_same_url():
+    """Reconnect (a second deposit for the same URL) must not 409 — it updates the credential
+    in place, preserving its id."""
     client, creds = _vault_client_with_fake_sdk()
     url = "https://mcp.example.com/sse"
 
     first_id = _put(client, url)
-    second_id = _put(client, url)  # would raise the fake's 409 if the old cred weren't deleted
+    second_id = _put(client, url)  # would raise the fake's 409 if it created a duplicate
 
-    assert first_id != second_id
+    assert first_id == second_id  # same credential, updated in place
     urls = [c.auth.mcp_server_url for c in creds.creds]
     assert urls == [url]  # exactly one credential remains for the URL
 
