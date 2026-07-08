@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     # by this URL and a mismatch means the token is silently not injected.
     likmcp_resource_url: str = ""
 
+    # --- Google Drive data connection: pre-configured Google client (no DCR) -------
+    # Same shape as the lik-mcp connection: Google is the authorization server and has no
+    # dynamic client registration, so the client is pre-configured and keyed by the MCP
+    # server URL the agent declares. Must exactly equal that declared URL.
+    gdrivemcp_client_id: str = ""
+    gdrivemcp_client_secret: str = ""
+    gdrivemcp_resource_url: str = ""
+
     # --- Anthropic / Managed Agents ------------------------------------------------
     anthropic_api_key: str = ""
 
