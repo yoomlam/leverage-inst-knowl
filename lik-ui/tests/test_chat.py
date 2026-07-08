@@ -185,6 +185,37 @@ def test_stream_surfaces_running_status(db):
     assert '"state": "running"' in r.text
 
 
+def test_send_and_stream_subscribes_before_sending():
+    # Regression: the stream must be opened before the message is dispatched. Sending first
+    # left a gap where a fast turn could finish before we subscribed, so its reply never
+    # streamed and only showed up on a page refresh.
+    calls = []
+    stream_events = [
+        SimpleNamespace(type="agent.message", content=[SimpleNamespace(text="Hi")]),
+        SimpleNamespace(type="session.status_idle"),  # terminates the turn
+    ]
+
+    class FakeStream:
+        def __enter__(self):
+            return iter(stream_events)
+
+        def __exit__(self, *exc):
+            calls.append("close")
+            return False
+
+    client = AnthropicSessionsClient.__new__(AnthropicSessionsClient)
+    client._client = SimpleNamespace(beta=SimpleNamespace(sessions=SimpleNamespace(
+        events=SimpleNamespace(
+            stream=lambda session_id: (calls.append("stream"), FakeStream())[1],
+            send=lambda session_id, events: calls.append("send"),
+        ))))
+
+    out = list(client.send_and_stream("sess_1", "hello"))
+    assert calls[:2] == ["stream", "send"]  # subscribed before dispatching the turn
+    assert "close" in calls  # stream context is closed
+    assert out == [{"type": "text", "text": "Hi"}, {"type": "done"}]
+
+
 def test_history_drops_transient_status_events():
     # A past turn's "running" is meaningless on replay, so list_events filters it out.
     raw = [SimpleNamespace(type="session.status_running", id="s_1"),

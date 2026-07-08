@@ -143,16 +143,24 @@ class AnthropicSessionsClient:
 
     def send_and_stream(self, session_id: str, message: str) -> Iterator[dict]:
         events = self._client.beta.sessions.events
-        events.send(
-            session_id,
-            events=[{"type": "user.message", "content": [{"type": "text", "text": message}]}],
-        )
-        for event in events.stream(session_id):
-            etype = getattr(event, "type", "")
-            if etype == "end_turn" or etype.startswith(("session.status_idle", "session.status_terminated")):
-                break  # the turn is complete
-            if normalized := self._normalize(event):
-                yield normalized
+        # Subscribe BEFORE sending. ``stream()`` opens the HTTP connection eagerly (the request
+        # is issued when it's called, not on first iteration), so the subscription is already
+        # listening before ``send()`` dispatches the turn. Sending first left a gap in which a
+        # fast turn could produce and finish its reply before we subscribed — we'd then see only
+        # the terminal ``session.status_idle`` and stream nothing, stranding the reply behind a
+        # page refresh. The stream carries only events from connection time forward (prior turns
+        # aren't replayed), so opening it early doesn't duplicate history.
+        with events.stream(session_id) as stream:
+            events.send(
+                session_id,
+                events=[{"type": "user.message", "content": [{"type": "text", "text": message}]}],
+            )
+            for event in stream:
+                etype = getattr(event, "type", "")
+                if etype == "end_turn" or etype.startswith(("session.status_idle", "session.status_terminated")):
+                    break  # the turn is complete
+                if normalized := self._normalize(event):
+                    yield normalized
         yield {"type": "done"}
 
     def list_events(self, session_id: str) -> Iterator[dict]:

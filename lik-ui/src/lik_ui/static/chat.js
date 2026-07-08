@@ -173,18 +173,19 @@
     bubble("user", "You: " + message);
     input.value = "";
 
-    // Every submitted turn starts queued in the agent's work queue. Show that immediately,
-    // move it to "running" when the agent picks the turn up (a `status` event), and clear it
-    // once the agent's first real output arrives (or the turn ends/errors).
-    let pending = bubble("pending", "⏳ Queued — waiting for the agent…");
-    function clearPending() {
-      if (pending) { pending.remove(); pending = null; }
-    }
+    // One persistent activity indicator for the whole turn. It stays visible from submit
+    // through tool calls and intermediate output — so the user always knows the agent is
+    // still working — and is removed only when the turn finishes (`done`) or the connection
+    // drops. It's kept pinned to the bottom of the transcript as new bubbles stream in.
+    let activity = bubble("pending", "⏳ Queued — waiting for the agent…");
+    function setActivity(text) { if (activity) activity.textContent = text; }
+    function endActivity() { if (activity) { activity.remove(); activity = null; } }
+    function keepActivityLast() { if (activity) transcript.appendChild(activity); }
 
     let assistant = null;
     // Did the live stream render anything for this turn? If not, the reply was persisted but
-    // the stream missed it (fast turn, dropped connection) — reconcile from history so it
-    // still appears without a manual refresh.
+    // the stream missed it (dropped connection) — reconcile from history so it still appears
+    // without a manual refresh.
     let produced = false;
     const url = "/chat/" + sessionId + "/stream?message=" + encodeURIComponent(message);
     const source = new EventSource(url);
@@ -192,11 +193,10 @@
     source.onmessage = function (ev) {
       const event = JSON.parse(ev.data);
       if (event.type === "status") {
-        // Keep the indicator, just advance it queued -> running. Real output clears it below.
-        if (pending && event.state === "running") pending.textContent = "⚙ Running — the agent is working…";
+        // Advance the indicator queued -> running; it stays put until the turn ends.
+        if (event.state === "running") setActivity("⚙ Working — the agent is running…");
         return;
       }
-      clearPending();
       if (event.type === "text") {
         produced = true;
         if (!assistant) { assistant = bubble("assistant", ""); assistant._raw = ""; }
@@ -215,16 +215,21 @@
         produced = true;
         addUsage(event);
       } else if (event.type === "error") {
+        // A streamed error isn't necessarily terminal (e.g. an unconnected MCP source errors
+        // first and the agent still answers), so surface it but keep the indicator running.
         produced = true;
         errorBubble(event);
       } else if (event.type === "done") {
+        endActivity();
         source.close();
         if (!produced) loadHistory();  // stream ended without output -> pull the persisted reply
+        return;
       }
+      keepActivityLast();  // a new bubble was appended above; move the indicator back to the end
     };
 
     source.onerror = function () {
-      clearPending();
+      endActivity();
       source.close();
       // The connection dropped mid-turn; the agent keeps running server-side. Pull whatever
       // was recorded so a completed reply isn't stranded behind a refresh.
