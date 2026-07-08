@@ -56,7 +56,9 @@
     // Tag the bubble so the "Show tool use" / "Show MCP tool use" checkboxes can hide it by
     // kind. MCP tools carry a server; built-in agent tools don't.
     const kind = event.server ? "mcp" : "builtin";
-    const b = bubble("tool " + kind, "⚙ using " + (event.server ? event.server + " · " : "") + event.name);
+    // Distinct icon per kind: a plug for MCP (external server) tools, a gear for built-in ones.
+    const icon = event.server ? "🔌" : "⚙";
+    const b = bubble("tool " + kind, icon + " using " + (event.server ? event.server + " · " : "") + event.name);
     // Show the tool-call arguments in a collapsible block so the transcript stays scannable
     // but the detail is one click away. Omitted when there are no arguments.
     if (event.input && Object.keys(event.input).length) {

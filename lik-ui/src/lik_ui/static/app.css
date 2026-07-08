@@ -61,6 +61,8 @@ details.skills .skill-details p { margin: .3rem 0 0; }
 .card.assistant { background: #fff; }
 .card.tool { background: #f7f7f5; border-color: #e6e6e0; color: var(--muted);
   font-size: .9rem; padding: .6rem .8rem; }
+/* MCP (external-server) tools get a distinct tint to set them apart from built-in tools. */
+.card.tool.mcp { background: #f3f0fb; border-color: #ddd3f0; }
 .card.error { background: #fff5ef; border-color: #f0c9ad; color: #c05621; }
 /* Collapsible tool arguments / results. */
 .card.tool details { margin-top: .4rem; }
