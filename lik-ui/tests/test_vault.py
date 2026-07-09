@@ -10,6 +10,7 @@ class FakeVaultClient:
         self.calls = 0
         self.last_metadata = None
         self.deleted = []
+        self.deleted_credentials: list[tuple[str, str]] = []
         self.credentials: list[dict] = []
 
     def create_vault(self, display_name: str, metadata: dict) -> str:
@@ -19,6 +20,9 @@ class FakeVaultClient:
 
     def list_credentials(self, vault_id: str) -> list[dict]:
         return self.credentials
+
+    def delete_credential(self, vault_id: str, credential_id: str) -> None:
+        self.deleted_credentials.append((vault_id, credential_id))
 
     def delete_vault(self, vault_id: str) -> None:
         self.deleted.append(vault_id)
@@ -156,6 +160,23 @@ def test_reconnect_refresh_block_omits_immutable_fields():
     )
 
     assert set(seen["auth"]["refresh"]) == {"refresh_token", "token_endpoint_auth", "scope"}
+
+
+def test_list_credentials_includes_id():
+    client, _ = _vault_client_with_fake_sdk()
+    cid = _put(client, "https://a.example.com/sse")
+    listed = client.list_credentials("vlt_1")
+    assert listed == [{"id": cid, "display_name": None, "url": "https://a.example.com/sse"}]
+
+
+def test_delete_credential_removes_only_that_credential():
+    client, creds = _vault_client_with_fake_sdk()
+    keep = _put(client, "https://a.example.com/sse")
+    drop = _put(client, "https://b.example.com/sse")
+
+    client.delete_credential("vlt_1", drop)
+
+    assert [c.id for c in creds.creds] == [keep]
 
 
 def test_deposit_leaves_other_urls_untouched():

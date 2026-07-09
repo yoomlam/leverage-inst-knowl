@@ -36,7 +36,12 @@ class VaultClient(Protocol):
         ...
 
     def list_credentials(self, vault_id: str) -> list[dict]:
-        """Return the vault's credentials as ``{"display_name", "url"}`` dicts (no secrets)."""
+        """Return the vault's credentials as ``{"id", "display_name", "url"}`` dicts (no secrets)."""
+        ...
+
+    def delete_credential(self, vault_id: str, credential_id: str) -> None:
+        """Delete a single credential from the vault, leaving the vault and its other
+        credentials intact."""
         ...
 
     def delete_vault(self, vault_id: str) -> None:
@@ -117,8 +122,11 @@ class AnthropicVaultClient:
         creds = []
         for cred in self._client.beta.vaults.credentials.list(vault_id=vault_id):
             url = getattr(getattr(cred, "auth", None), "mcp_server_url", None)
-            creds.append({"display_name": getattr(cred, "display_name", None), "url": url})
+            creds.append({"id": cred.id, "display_name": getattr(cred, "display_name", None), "url": url})
         return creds
+
+    def delete_credential(self, vault_id: str, credential_id: str) -> None:
+        self._client.beta.vaults.credentials.delete(credential_id, vault_id=vault_id)
 
     def delete_vault(self, vault_id: str) -> None:
         self._client.beta.vaults.delete(vault_id)

@@ -15,15 +15,22 @@
         <ul class="cred-list">
           {% for c in credentials %}
             <li>
-              <strong>{{ c.display_name or "Credential" }}</strong>
-              {% if c.url %}<div class="cred-url">{{ c.url }}</div>{% endif %}
+              <div>
+                <strong>{{ c.display_name or "Credential" }}</strong>
+                {% if c.url %}<div class="cred-url">{{ c.url }}</div>{% endif %}
+              </div>
+              <form method="post" action="/settings/credential/delete"
+                    onsubmit="return confirm('Delete this credential? This cannot be undone.');">
+                <input type="hidden" name="credential_id" value="{{ c.id }}">
+                <button class="btn danger" type="submit">Delete</button>
+              </form>
             </li>
           {% endfor %}
         </ul>
       {% else %}
         <p>No credentials connected yet.</p>
       {% endif %}
-      <p>Deleting it disconnects all sources and removes those credentials. A new, empty
+      <p>Deleting the vault disconnects all sources and removes those credentials. A new, empty
          vault is created automatically the next time an agent needs one.</p>
       <form method="post" action="/settings/vault/delete"
             onsubmit="return confirm('Delete your vault and all connected credentials? This cannot be undone.');">

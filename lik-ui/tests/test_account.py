@@ -36,11 +36,33 @@ def test_settings_page_renders(db):
 
 def test_settings_page_lists_credentials(db):
     client, vc = _client(db)
-    vc.credentials = [{"display_name": "lik-mcp", "url": "https://mcp.example/mcp"}]
+    vc.credentials = [{"id": "vcrd_1", "display_name": "lik-mcp", "url": "https://mcp.example/mcp"}]
     r = client.get("/settings")
     assert r.status_code == 200
     assert "lik-mcp" in r.text
     assert "https://mcp.example/mcp" in r.text
+    assert "vcrd_1" in r.text  # the delete button carries the credential id
+
+
+def test_delete_credential_deletes_only_that_credential(db):
+    client, vc = _client(db)
+    user = Store(db).get_user_vault(Store(db).get_user_by_email("alice@navapbc.com")["id"])
+
+    r = client.post("/settings/credential/delete", data={"credential_id": "vcrd_1"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/settings"
+    assert vc.deleted_credentials == [(user, "vcrd_1")]
+    assert vc.deleted == []  # the vault itself is left intact
+
+
+def test_delete_credential_requires_login(db):
+    oidc = FakeOidc({})
+    app = build_app(Settings(env="test"), store=Store(db), app_oidc=oidc, vault_client=FakeVaultClient())
+    r = TestClient(app, follow_redirects=False).post(
+        "/settings/credential/delete", data={"credential_id": "vcrd_1"}
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/login"
 
 
 def test_delete_vault_deletes_and_forgets_mapping(db):
