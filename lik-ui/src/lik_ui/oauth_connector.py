@@ -315,13 +315,19 @@ class OAuthConnector:
         }
         if creds.client_secret:  # client_secret_post
             data["client_secret"] = creds.client_secret
+        # RFC 6749 token responses are JSON, but GitHub's token endpoint defaults to
+        # form-encoding and only returns JSON when asked; compliant servers ignore this.
+        headers = {"Accept": "application/json"}
         async with self._client_factory() as client:
-            resp = await client.post(discovery.token_endpoint, data=data)
+            resp = await client.post(discovery.token_endpoint, data=data, headers=headers)
             try:
                 resp.raise_for_status()
             except httpx.HTTPError as exc:
                 raise ConnectorError(f"Token exchange failed: {exc}") from exc
-            return resp.json()
+            try:
+                return resp.json()
+            except ValueError as exc:
+                raise ConnectorError(f"Token endpoint returned a non-JSON response: {exc}") from exc
 
     def _refresh_block(self, discovery: Discovery, creds: ClientCredentials, token_response: dict) -> dict | None:
         refresh_token = token_response.get("refresh_token")

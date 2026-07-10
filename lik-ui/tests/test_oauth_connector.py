@@ -217,6 +217,32 @@ async def test_exchange_code_posts_and_returns_tokens(store):
     assert calls[("POST", f"{ISSUER}/token")] == 1
 
 
+async def test_exchange_code_requests_json(store):
+    # GitHub's token endpoint returns form-encoding unless asked for JSON; the exchange
+    # must send Accept: application/json so every provider replies with JSON.
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["accept"] = request.headers.get("accept")
+        return httpx.Response(200, json={"access_token": "at", "expires_in": 3600})
+
+    conn = _connector(store, handler)
+    await conn.exchange_code(_DISCOVERY, _CREDS, "code", "verifier", MCP_URL)
+    assert seen["accept"] == "application/json"
+
+
+async def test_exchange_code_raises_on_non_json_response(store):
+    # A token endpoint that answers 200 with form-encoded text (GitHub's default) must
+    # surface a clean ConnectorError, not a raw JSONDecodeError bubbling up as a 500.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="access_token=at&token_type=bearer",
+                              headers={"content-type": "application/x-www-form-urlencoded"})
+
+    conn = _connector(store, handler)
+    with pytest.raises(ConnectorError, match="non-JSON"):
+        await conn.exchange_code(_DISCOVERY, _CREDS, "code", "verifier", MCP_URL)
+
+
 def test_refresh_block_omitted_without_refresh_token():
     conn = OAuthConnector(None, {}, REDIRECT)
     assert conn._refresh_block(_DISCOVERY, _CREDS, {"access_token": "at"}) is None
