@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     gdrivemcp_client_secret: str = ""
     gdrivemcp_resource_url: str = ""
 
+    # --- GitHub data connection: pre-configured OAuth app (no DCR) -----------------
+    # GitHub is the authorization server and offers no dynamic client registration, so
+    # the client is pre-configured and keyed by the MCP server URL the agent declares.
+    # Must exactly equal that declared URL.
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    github_resource_url: str = ""
+
     # --- Anthropic / Managed Agents ------------------------------------------------
     anthropic_api_key: str = ""
 

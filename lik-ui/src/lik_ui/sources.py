@@ -3,8 +3,9 @@
 Most MCP servers advertise dynamic client registration (DCR), so lik-ui self-registers a
 client at runtime and needs no entry here. This registry carries a pre-configured client
 ONLY for sources whose authorization server has no DCR — today those are lik-mcp and
-Google Drive, both fronted by Google as the AS (Google has no registration endpoint).
-Adding a DCR-capable source later needs no entry; adding a no-DCR source needs one.
+Google Drive (both fronted by Google as the AS) and GitHub, none of which expose a
+registration endpoint. Adding a DCR-capable source later needs no entry; adding a
+no-DCR source needs one.
 """
 
 from pydantic import BaseModel
@@ -34,6 +35,10 @@ def build_source_registry(settings: Settings) -> dict[str, SourceConfig]:
          ["openid", "email"]),
         (settings.gdrivemcp_resource_url, settings.gdrivemcp_client_id, settings.gdrivemcp_client_secret,
          ["openid", "email", "https://www.googleapis.com/auth/drive.readonly"]),
+        # No explicit scopes: GitHub grants access per the OAuth app's own configured
+        # permissions rather than per-request scopes.
+        (settings.github_resource_url, settings.github_client_id, settings.github_client_secret,
+         []),
     ]
     registry: dict[str, SourceConfig] = {}
     for resource_url, client_id, client_secret, scopes in declared:
