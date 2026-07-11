@@ -9,6 +9,7 @@ status and drive the connect action for each missing source.
 from typing import Protocol
 
 from .settings import Settings
+from .sources import normalize_url
 from .vault import VaultClient, ensure_user_vault
 
 
@@ -65,8 +66,14 @@ def build_agents_client(settings: Settings) -> AgentsClient | None:
 
 def resolve_connections(servers: list[dict], connected_urls: set[str]) -> list[dict]:
     """For each server the agent declares, mark whether the user's vault already has a
-    matching credential (exact URL match, as the platform requires)."""
-    return [{"name": d["name"], "url": d["url"], "connected": d["url"] in connected_urls} for d in servers]
+    matching credential. Compare on the normalized URL: the vault platform stores the
+    server URL with a trailing slash stripped, so a slash-terminated declared URL (e.g.
+    GitHub's ``.../mcp/``) would never match its stored form under a raw equality check."""
+    connected_norm = {normalize_url(u) for u in connected_urls}
+    return [
+        {"name": d["name"], "url": d["url"], "connected": normalize_url(d["url"]) in connected_norm}
+        for d in servers
+    ]
 
 
 def register_agent_routes(app) -> None:

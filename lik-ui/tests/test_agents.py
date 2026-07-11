@@ -47,6 +47,15 @@ def test_resolve_zero_declared_returns_empty():
     assert resolve_connections([], set()) == []
 
 
+def test_resolve_matches_across_trailing_slash():
+    # GitHub declares its server with a trailing slash, but the vault platform stores the
+    # URL with it stripped; the connected check must still match the two.
+    github = {"name": "github", "url": "https://api.githubcopilot.com/mcp/"}
+    conns = resolve_connections([github], {"https://api.githubcopilot.com/mcp"})
+    assert conns[0]["connected"] is True
+    assert conns[0]["url"] == "https://api.githubcopilot.com/mcp/"  # declared form preserved for the connect link
+
+
 def test_describe_skill_resolves_latest_version():
     """A skill pinned to "latest" is resolved to the concrete latest_version before the
     version lookup that carries name/description."""
