@@ -38,8 +38,44 @@
   toggleMcp.addEventListener("change", applyToolVisibility);
   applyToolVisibility();
 
+  // Auto-approve toggle. When on, every tool call that would prompt is approved automatically
+  // for the rest of this session — the agent still gates each call server-side, so this just
+  // answers each pause with "allow" via the same /confirm path a manual click uses. Scoped to
+  // the browser session (sessionStorage keyed by session id) so a refresh keeps the choice.
+  const toggleAuto = document.getElementById("toggle-auto");
+  const autoKey = "lik-auto-approve:" + sessionId;
+  toggleAuto.checked = sessionStorage.getItem(autoKey) === "1";
+  function autoApprove() { return toggleAuto.checked; }
+  toggleAuto.addEventListener("change", function () {
+    sessionStorage.setItem(autoKey, toggleAuto.checked ? "1" : "");
+    // Turning it on clears anything already waiting for approval right now.
+    if (toggleAuto.checked) autoApproveIds(pendingCallIds());
+  });
+
   // Maps a tool_use id to its rendered bubble so a later tool_result can nest under its call.
   const toolCalls = {};
+
+  // Tool-use ids that still show a live Approve/Deny prompt (unresolved "ask" calls).
+  function pendingCallIds() {
+    return Object.keys(toolCalls).filter(function (id) {
+      return toolCalls[id].querySelector(".tool-actions");
+    });
+  }
+
+  // Approve the first still-pending call among `ids`. One at a time: the resumed turn
+  // re-prompts for any remaining blocked calls and that pause routes back here, so a chain of
+  // pending calls clears without stacking concurrent streams. The prompt is consumed first so
+  // it can't also be answered by a manual click.
+  function autoApproveIds(ids) {
+    const id = (ids || []).find(function (x) {
+      const c = toolCalls[x];
+      return c && c.querySelector(".tool-actions");
+    });
+    if (!id) return;
+    const call = toolCalls[id];
+    call.querySelector(".tool-actions").remove();
+    confirmTool(id, "allow", call._sessionThreadId);
+  }
 
   function collapsible(summaryText, body) {
     const details = document.createElement("details");
@@ -71,6 +107,7 @@
     // toolResultBubble). A missing id means we couldn't route an answer, so no prompt.
     if (event.permission === "ask" && event.id) {
       b.classList.add("awaiting");
+      b._sessionThreadId = event.session_thread_id;  // echoed back on approval; see autoApproveIds
       b.appendChild(confirmActions(event.id, event.session_thread_id));
     }
     return b;
@@ -203,6 +240,14 @@
       .catch(function () { /* history is best-effort; a blank transcript is fine */ });
   }
 
+  // Reload persisted history, then (if auto-approve is on) clear any call left waiting — e.g.
+  // a pause that predates a page refresh, which history replays with its prompt intact.
+  function reconcile() {
+    return loadHistory().then(function () {
+      if (autoApprove()) autoApproveIds(pendingCallIds());
+    });
+  }
+
   // Consume one turn's SSE stream from `url` into the transcript. Shared by sending a message
   // and by answering a paused tool call (both stream the same normalized vocabulary), so the
   // rendering and reconcile logic lives in one place. `initial` is the first activity label.
@@ -259,6 +304,13 @@
         // and close the stream — a decision reopens it via confirmTool. If the pausing tool_use
         // wasn't seen live (e.g. we subscribed late), pull it from history so its prompt shows.
         source.close();
+        if (autoApprove()) {
+          // Approve without prompting; if the pausing call wasn't seen live, pull it first.
+          endActivity();
+          if (produced) autoApproveIds(event.event_ids);
+          else reconcile();
+          return;
+        }
         if (!produced) { endActivity(); loadHistory(); return; }
         setActivity("⏸ Waiting for your approval on the tool call above.");
         keepActivityLast();
@@ -266,7 +318,9 @@
       } else if (event.type === "done") {
         endActivity();
         source.close();
-        if (!produced) loadHistory();  // stream ended without output -> pull the persisted reply
+        // A completed turn has nothing paused, so no auto-approve here — just recover a reply
+        // the stream may have missed. (awaiting_confirmation, not done, signals a pause.)
+        if (!produced) loadHistory();
         return;
       }
       keepActivityLast();  // a new bubble was appended above; move the indicator back to the end
@@ -277,7 +331,7 @@
       source.close();
       // The connection dropped mid-turn; the agent keeps running server-side. Pull whatever
       // was recorded so a completed reply isn't stranded behind a refresh.
-      loadHistory();
+      reconcile();
     };
   }
 
@@ -299,5 +353,5 @@
                "⏳ Queued — waiting for the agent…");
   });
 
-  loadHistory();
+  reconcile();
 })();
