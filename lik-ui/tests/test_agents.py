@@ -78,6 +78,33 @@ def test_describe_skill_resolves_latest_version():
     assert out == {"name": "Query Project Index", "description": "Short blurb."}
 
 
+def test_describe_maps_permission_policy_per_server():
+    """The per-server permission policy lives on the agent's mcp_toolset tools (keyed by
+    mcp_server_name), not on mcp_servers; describe joins them onto each server."""
+    agent = SimpleNamespace(
+        name="A", system=None, model=None, skills=[], version="2",
+        mcp_servers=[SimpleNamespace(name="atlassian", url="https://a/"),
+                     SimpleNamespace(name="github", url="https://g/")],
+        tools=[
+            SimpleNamespace(type="mcp_toolset", mcp_server_name="atlassian",
+                            default_config=SimpleNamespace(permission_policy=SimpleNamespace(type="ask"))),
+            SimpleNamespace(type="mcp_toolset", mcp_server_name="github",
+                            default_config=SimpleNamespace(permission_policy=SimpleNamespace(type="always_allow"))),
+            # A non-toolset tool is ignored; a server with no toolset gets None.
+            SimpleNamespace(type="agent_toolset_20260401", mcp_server_name=None, default_config=None),
+        ],
+    )
+    client = AnthropicAgentsClient.__new__(AnthropicAgentsClient)
+    client._client = SimpleNamespace(beta=SimpleNamespace(agents=SimpleNamespace(
+        retrieve=lambda aid: agent)))
+
+    servers = client.describe("agent_1")["servers"]
+    assert servers == [
+        {"name": "atlassian", "url": "https://a/", "permission_policy": "ask"},
+        {"name": "github", "url": "https://g/", "permission_policy": "always_allow"},
+    ]
+
+
 def _app(db, agents_client, vc):
     oidc = FakeOidc({"email": "alice@navapbc.com", "email_verified": True})
     settings = Settings(env="test", agents_config="agent_1:env_1")

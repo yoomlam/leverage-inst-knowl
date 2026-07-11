@@ -16,8 +16,10 @@ from .vault import VaultClient, ensure_user_vault
 class AgentsClient(Protocol):
     def describe(self, agent_id: str) -> dict:
         """Return the agent's details in a single lookup: ``{"name": str | None,
-        "servers": [{"name", "url"}, ...], "system": str | None, "model": str | None,
-        "skills": [{"id", "type", "version"}, ...], "version": str | None}``."""
+        "servers": [{"name", "url", "permission_policy"}, ...], "system": str | None,
+        "model": str | None, "skills": [{"id", "type", "version"}, ...], "version": str | None}``.
+        ``permission_policy`` is the server-side gate the agent applies to that MCP's calls
+        (e.g. "always_allow", "ask"), or ``None`` when unknown."""
         ...
 
     def describe_skill(self, skill_id: str, version: str) -> dict:
@@ -36,11 +38,28 @@ class AnthropicAgentsClient:
 
         self._client = anthropic.Anthropic(api_key=api_key)
 
+    @staticmethod
+    def _server_policies(agent) -> dict:
+        """Map each MCP server name to its toolset's default permission-policy type (e.g.
+        "always_allow", "ask"). The policy lives on the agent's ``mcp_toolset`` tools, keyed by
+        ``mcp_server_name`` — not on the ``mcp_servers`` list itself."""
+        policies: dict[str, str | None] = {}
+        for t in getattr(agent, "tools", None) or []:
+            name = getattr(t, "mcp_server_name", None)
+            if getattr(t, "type", None) == "mcp_toolset" and name:
+                policy = getattr(getattr(t, "default_config", None), "permission_policy", None)
+                policies[name] = getattr(policy, "type", None)
+        return policies
+
     def describe(self, agent_id: str) -> dict:
         agent = self._client.beta.agents.retrieve(agent_id)
+        policies = self._server_policies(agent)
         return {
             "name": agent.name,
-            "servers": [{"name": s.name, "url": s.url} for s in (agent.mcp_servers or [])],
+            "servers": [
+                {"name": s.name, "url": s.url, "permission_policy": policies.get(s.name)}
+                for s in (agent.mcp_servers or [])
+            ],
             "system": agent.system,
             "model": getattr(agent.model, "id", None),
             "skills": [

@@ -44,8 +44,10 @@ class FakeAgentsClient:
     def describe(self, agent_id):
         return {
             "name": "Discovery Layer Agent",
-            "servers": [{"name": "atlassian", "url": "https://a/"},
-                        {"name": "github", "url": "https://g/"}],
+            "servers": [
+                {"name": "atlassian", "url": "https://a/", "permission_policy": "ask"},
+                {"name": "github", "url": "https://g/", "permission_policy": "always_allow"},
+            ],
             "system": None,
             "model": None,
         }
@@ -182,9 +184,12 @@ def test_chat_page_lists_declared_servers_for_auto_approve(db):
     loc = client.get("/chat?agent_id=agent_1").headers["location"]
 
     page = client.get(loc).text
-    # Checked by default: every declared server is trusted until the user unticks one.
+    # Checked by default: every declared server is trusted until the user unticks one. An
+    # "ask" server stays toggleable; an "always_allow" server is locked (checked + disabled)
+    # since its calls never pause for approval.
     assert 'class="auto-server" value="atlassian" checked' in page
-    assert 'class="auto-server" value="github" checked' in page
+    assert 'value="atlassian" checked disabled' not in page
+    assert 'class="auto-server" value="github" checked disabled' in page
 
 
 def test_resume_does_not_create_a_new_session(db):

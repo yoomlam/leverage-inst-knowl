@@ -294,17 +294,19 @@ def register_chat_routes(app) -> None:
         if not session:
             return HTMLResponse("Session not found.", status_code=404)
         # Show the agent's display name and its declared MCP servers; both come from the
-        # agent's own definition via the SDK. The server names drive the per-server
-        # auto-approve checklist and match the mcp_server_name on tool-use events. Fall back
-        # to the agent id / no servers when the lookup is unavailable.
+        # agent's own definition via the SDK. Each server carries its permission_policy so the
+        # auto-approve checklist can lock a server that already always-allows server-side (its
+        # calls never pause, so the checkbox can't meaningfully be unchecked). Server names
+        # match the mcp_server_name on tool-use events. Fall back to the agent id / no servers
+        # when the lookup is unavailable.
         agent_label = session["agent_id"]
-        servers: list[str] = []
+        servers: list[dict] = []
         agents_client = request.app.state.agents_client
         if agents_client is not None:
             try:
                 described = agents_client.describe(session["agent_id"])
                 agent_label = described["name"] or session["agent_id"]
-                servers = [s["name"] for s in described["servers"]]
+                servers = described["servers"]
             except Exception:  # noqa: BLE001 - a label lookup failure shouldn't block viewing the chat
                 pass
         return templates.TemplateResponse(

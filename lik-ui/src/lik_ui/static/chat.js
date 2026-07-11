@@ -55,6 +55,9 @@
   );
   function isAutoServer(server) { return autoServers.has(server); }
   Array.prototype.forEach.call(serverBoxes, function (cb) {
+    // A disabled box is a server that always-allows server-side: it's trusted no matter what a
+    // stale stored set says, and can't be toggled off.
+    if (cb.disabled) autoServers.add(cb.value);
     cb.checked = autoServers.has(cb.value);
     cb.addEventListener("change", function () {
       if (cb.checked) autoServers.add(cb.value); else autoServers.delete(cb.value);

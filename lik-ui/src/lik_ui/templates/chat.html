@@ -13,7 +13,12 @@
     <div id="auto-approve">
       <span class="auto-approve-label">Auto-approve tool calls this session from:</span>
       {% for srv in servers %}
-        <label><input type="checkbox" class="auto-server" value="{{ srv }}" checked> {{ srv }}</label>
+        {% if srv.permission_policy == "always_allow" %}
+          <label title="This source always allows its tool calls on the agent, so they run without prompting — this can't be turned off here.">
+            <input type="checkbox" class="auto-server" value="{{ srv.name }}" checked disabled> {{ srv.name }}</label>
+        {% else %}
+          <label><input type="checkbox" class="auto-server" value="{{ srv.name }}" checked> {{ srv.name }}</label>
+        {% endif %}
       {% endfor %}
     </div>
   {% endif %}
