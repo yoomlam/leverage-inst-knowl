@@ -182,8 +182,9 @@ def test_chat_page_lists_declared_servers_for_auto_approve(db):
     loc = client.get("/chat?agent_id=agent_1").headers["location"]
 
     page = client.get(loc).text
-    assert 'class="auto-server" value="atlassian"' in page
-    assert 'class="auto-server" value="github"' in page
+    # Checked by default: every declared server is trusted until the user unticks one.
+    assert 'class="auto-server" value="atlassian" checked' in page
+    assert 'class="auto-server" value="github" checked' in page
 
 
 def test_resume_does_not_create_a_new_session(db):

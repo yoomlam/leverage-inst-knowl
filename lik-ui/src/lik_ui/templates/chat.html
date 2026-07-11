@@ -13,7 +13,7 @@
     <div id="auto-approve">
       <span class="auto-approve-label">Auto-approve tool calls this session from:</span>
       {% for srv in servers %}
-        <label><input type="checkbox" class="auto-server" value="{{ srv }}"> {{ srv }}</label>
+        <label><input type="checkbox" class="auto-server" value="{{ srv }}" checked> {{ srv }}</label>
       {% endfor %}
     </div>
   {% endif %}

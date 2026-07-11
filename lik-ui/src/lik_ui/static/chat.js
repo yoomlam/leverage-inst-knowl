@@ -44,9 +44,17 @@
   // the same /confirm path a manual click uses. The trusted set persists in sessionStorage
   // (keyed by session id) so a refresh keeps the choices.
   const autoServersKey = "lik-auto-servers:" + sessionId;
-  const autoServers = new Set(JSON.parse(sessionStorage.getItem(autoServersKey) || "[]"));
+  const serverBoxes = document.querySelectorAll(".auto-server");
+  const storedServers = sessionStorage.getItem(autoServersKey);
+  // Default to trusting every declared server; once the user changes anything, their explicit
+  // set is stored and used verbatim (so unticking one, or all, sticks across a refresh).
+  const autoServers = new Set(
+    storedServers !== null
+      ? JSON.parse(storedServers)
+      : Array.prototype.map.call(serverBoxes, function (cb) { return cb.value; })
+  );
   function isAutoServer(server) { return autoServers.has(server); }
-  Array.prototype.forEach.call(document.querySelectorAll(".auto-server"), function (cb) {
+  Array.prototype.forEach.call(serverBoxes, function (cb) {
     cb.checked = autoServers.has(cb.value);
     cb.addEventListener("change", function () {
       if (cb.checked) autoServers.add(cb.value); else autoServers.delete(cb.value);
